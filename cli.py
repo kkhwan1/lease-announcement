@@ -330,6 +330,43 @@ def cmd_push(pdf_dir: str, out_dir: str, enrich: bool = False, with_images: bool
     return 0
 
 
+def cmd_geocode(limit: int | None = None, dry_run: bool = False) -> int:
+    """buildings.latitude/longitude가 NULL인 행을 주소 기반으로 보강."""
+    import os
+    from app.geocode import geocode_address
+    from app.supa_store import get_client
+
+    client = get_client()
+    kakao_key = os.environ.get("KAKAO_REST_API_KEY")
+
+    q = (
+        client.table("buildings")
+        .select("id, name, address_road, address_raw, latitude")
+        .is_("latitude", "null")
+    )
+    if limit:
+        q = q.limit(limit)
+    rows = q.execute().data or []
+    print(f"좌표 NULL 건물: {len(rows)}건")
+
+    ok = fail = 0
+    for r in rows:
+        addr = r.get("address_road") or r.get("address_raw")
+        pt = geocode_address(addr, kakao_key)
+        if pt:
+            ok += 1
+            print(f"  OK  {r['name']}: ({pt.lat:.6f}, {pt.lng:.6f}) <- {addr}")
+            if not dry_run:
+                client.table("buildings").update(
+                    {"latitude": pt.lat, "longitude": pt.lng}
+                ).eq("id", r["id"]).execute()
+        else:
+            fail += 1
+            print(f"  --  {r['name']}: 보강 실패 <- {addr}")
+    print(f"\n완료: 성공 {ok} / 실패 {fail}" + (" (dry-run)" if dry_run else ""))
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # 진입점
 # ---------------------------------------------------------------------------
@@ -360,6 +397,11 @@ def main() -> int:
     p_push.add_argument("--no-images", action="store_true",
                         help="이미지 추출/Storage 업로드 생략 (텍스트만, 빠름)")
 
+    # geocode 커맨드: buildings 좌표 보강
+    p_geo = sub.add_parser("geocode", help="buildings 좌표 보강 (주소→위경도)")
+    p_geo.add_argument("--limit", type=int, default=None, help="처리 건수 제한")
+    p_geo.add_argument("--dry-run", action="store_true", help="DB 미반영, 결과만 출력")
+
     args = parser.parse_args()
 
     if args.cmd == "ingest":
@@ -369,6 +411,8 @@ def main() -> int:
     elif args.cmd == "push":
         return cmd_push(args.pdf_dir, args.out, enrich=args.enrich,
                         with_images=not args.no_images)
+    elif args.cmd == "geocode":
+        return cmd_geocode(limit=args.limit, dry_run=args.dry_run)
 
     return 0
 
