@@ -12,6 +12,8 @@ import { PhotoGallery } from "@/components/PhotoGallery";
 import { BuildingOverview } from "@/components/BuildingOverview";
 import { FloorTable } from "@/components/FloorTable";
 import { RentTrendChart } from "@/components/RentTrendChart";
+import { Button } from "@/components/ui/Button";
+import { SectionHeading } from "@/components/ui/SectionHeading";
 
 export async function generateMetadata({
   params,
@@ -44,39 +46,46 @@ export default async function BuildingDetailPage({
   if (!detail) notFound();
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
-      <Link
-        href="/"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-foreground"
-      >
-        <ChevronLeft className="h-4 w-4" aria-hidden />
-        목록으로
-      </Link>
+    <div className="mx-auto max-w-5xl px-4 py-12">
+      {/* 목록으로 back link */}
+      <div className="mb-6">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/">
+            <ChevronLeft className="h-4 w-4" aria-hidden />
+            목록으로
+          </Link>
+        </Button>
+      </div>
 
-      <h1 className="mb-1 text-2xl font-bold">{detail.name}</h1>
-      {detail.address_road && (
-        <p className="mb-4 text-muted">{detail.address_road}</p>
-      )}
+      {/* 건물명 + 주소 */}
+      <div className="mb-8">
+        <SectionHeading level={1} className="text-heading-lg md:text-display-lg mb-1">
+          {detail.name}
+        </SectionHeading>
+        {detail.address_road && (
+          <p className="text-subtitle-md text-steel">{detail.address_road}</p>
+        )}
+      </div>
 
-      <section className="mb-6">
+      <section className="mb-12">
         <PhotoGallery images={images} />
       </section>
 
-      <section className="mb-6">
+      <section className="mb-12">
         <BuildingOverview detail={detail} />
       </section>
 
-      <section className="mb-6">
-        <h2 className="mb-3 text-lg font-semibold">층별 공실 현황</h2>
+      <section className="mb-12">
+        <SectionHeading level={3} className="mb-4">층별 공실 현황</SectionHeading>
         <FloorTable floors={floors} />
       </section>
 
-      <section className="mb-6">
-        <h2 className="mb-3 text-lg font-semibold">임대료 추이</h2>
+      <section className="mb-12">
+        <SectionHeading level={3} className="mb-4">임대료 추이</SectionHeading>
         <RentTrendChart data={trend} />
       </section>
 
-      <section className="border-t border-border pt-4 text-xs text-muted">
+      <section className="border-t border-hairline-soft pt-6 text-caption text-stone">
         데이터 출처: 중개사 임대안내문 및 국토교통부 건축물대장. 실제 계약 조건은
         별도 확인이 필요합니다.
       </section>

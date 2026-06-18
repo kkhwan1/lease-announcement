@@ -54,6 +54,11 @@ function formatYTick(value: number): string {
   return `${Math.round(value / 10000)}만`;
 }
 
+// Recharts는 SVG 내부에서 CSS 변수를 읽지 못하므로 직접 상수로 정의.
+const COBALT = "#0064E0";
+const GRID_STROKE = "#E9EDF1";
+const AXIS_TICK_FILL = "#7A8C99";
+
 // Tooltip 커스텀 포맷
 function CustomTooltip({
   active,
@@ -66,9 +71,9 @@ function CustomTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded border border-gray-200 bg-white px-3 py-2 shadow-sm text-sm">
-      <p className="text-gray-500 mb-1">{label}</p>
-      <p className="font-semibold text-gray-900">
+    <div className="rounded-lg border border-hairline-soft shadow-elev2 bg-canvas px-3 py-2 text-body-sm">
+      <p className="text-steel mb-1">{label}</p>
+      <p className="text-ink-deep font-bold">
         평당 {formatRentManwon(payload[0].value)}
       </p>
     </div>
@@ -79,7 +84,7 @@ export function RentTrendChart({ data }: RentTrendChartProps) {
   // 빈 배열
   if (data.length === 0) {
     return (
-      <div className="rounded border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
+      <div className="rounded-xl border border-hairline-soft bg-canvas px-4 py-6 text-center text-body-sm text-stone">
         임대료 데이터가 없습니다.
       </div>
     );
@@ -94,20 +99,20 @@ export function RentTrendChart({ data }: RentTrendChartProps) {
     const avgRent = chartData.length === 1 ? chartData[0].rent : null;
 
     return (
-      <div className="rounded border border-gray-200 bg-white px-4 py-6">
-        <p className="text-sm text-gray-700">
+      <div className="rounded-xl border border-hairline-soft bg-canvas px-4 py-6">
+        <p className="text-body-sm text-charcoal">
           현재{" "}
           {monthLabel ? (
-            <span className="font-semibold">1개월({monthLabel})</span>
+            <span className="font-bold">1개월({monthLabel})</span>
           ) : (
             "1개월"
           )}{" "}
           데이터만 있습니다. 다음 달 데이터가 쌓이면 임대료 추이가 표시됩니다.
         </p>
         {avgRent !== null && (
-          <p className="mt-3 text-sm text-gray-500">
+          <p className="mt-3 text-body-sm text-steel">
             현재 평균 평당임대료:{" "}
-            <span className="font-semibold text-gray-900">{formatRentManwon(avgRent)}</span>
+            <span className="font-bold text-ink-deep">{formatRentManwon(avgRent)}</span>
           </p>
         )}
       </div>
@@ -115,19 +120,19 @@ export function RentTrendChart({ data }: RentTrendChartProps) {
   }
 
   return (
-    <div className="w-full bg-white">
+    <div className="w-full bg-canvas">
       <ResponsiveContainer width="100%" height={240}>
         <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
           <XAxis
             dataKey="month"
-            tick={{ fontSize: 12, fill: "#6b7280" }}
+            tick={{ fontSize: 12, fill: AXIS_TICK_FILL }}
             tickLine={false}
-            axisLine={{ stroke: "#e5e7eb" }}
+            axisLine={{ stroke: GRID_STROKE }}
           />
           <YAxis
             tickFormatter={formatYTick}
-            tick={{ fontSize: 12, fill: "#6b7280" }}
+            tick={{ fontSize: 12, fill: AXIS_TICK_FILL }}
             tickLine={false}
             axisLine={false}
             width={52}
@@ -136,10 +141,10 @@ export function RentTrendChart({ data }: RentTrendChartProps) {
           <Line
             type="monotone"
             dataKey="rent"
-            stroke="#2563eb"
+            stroke={COBALT}
             strokeWidth={2}
-            dot={{ r: 4, fill: "#2563eb", strokeWidth: 0 }}
-            activeDot={{ r: 5, fill: "#2563eb", strokeWidth: 0 }}
+            dot={{ r: 4, fill: COBALT, strokeWidth: 0 }}
+            activeDot={{ r: 5, fill: COBALT, strokeWidth: 0 }}
           />
         </LineChart>
       </ResponsiveContainer>

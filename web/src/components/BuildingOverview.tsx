@@ -10,6 +10,7 @@ import {
   formatPercent,
   toNum,
 } from "@/lib/format";
+import { Card } from "@/components/ui/Card";
 
 interface BuildingOverviewProps {
   detail: BuildingDetail;
@@ -19,9 +20,9 @@ interface BuildingOverviewProps {
 function DefinitionRow({ label, value }: { label: string; value: string | null }) {
   if (value === null || value.trim() === "" || value === "-") return null;
   return (
-    <div className="flex gap-2 py-1.5 text-sm">
-      <dt className="w-24 shrink-0 text-muted">{label}</dt>
-      <dd className="text-foreground">{value}</dd>
+    <div className="flex gap-2 py-1.5">
+      <dt className="w-24 shrink-0 text-body-sm font-bold text-ink">{label}</dt>
+      <dd className="text-body-sm text-charcoal">{value}</dd>
     </div>
   );
 }
@@ -35,10 +36,10 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded border border-border bg-white p-4">
-      <h2 className="mb-2 text-base font-semibold text-foreground">{title}</h2>
-      <dl className="divide-y divide-border">{children}</dl>
-    </section>
+    <Card variant="flat" as="section">
+      <h2 className="mb-3 text-heading-sm text-ink-deep">{title}</h2>
+      <dl className="divide-y divide-hairline-soft">{children}</dl>
+    </Card>
   );
 }
 
@@ -140,14 +141,12 @@ export function BuildingOverview({ detail }: BuildingOverviewProps) {
 
       {/* 3. 건물 특장점 — features_raw 있을 때만 */}
       {features_raw !== null && features_raw.trim() !== "" && (
-        <section className="rounded border border-border bg-white p-4">
-          <h2 className="mb-2 text-base font-semibold text-foreground">
-            건물 특장점
-          </h2>
-          <p className="whitespace-pre-line text-sm text-foreground">
+        <Card variant="flat" as="section">
+          <h2 className="mb-3 text-heading-sm text-ink-deep">건물 특장점</h2>
+          <p className="whitespace-pre-line text-body-md text-charcoal">
             {features_raw}
           </p>
-        </section>
+        </Card>
       )}
     </div>
   );

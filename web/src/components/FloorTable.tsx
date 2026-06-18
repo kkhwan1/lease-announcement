@@ -9,6 +9,7 @@ import {
   formatSqm,
   formatRentManwon,
 } from "@/lib/format";
+import { PillTab } from "@/components/ui/PillTab";
 
 // availability_kind 값 → 표시 문자열
 const AVAILABILITY_KIND_LABEL: Record<string, string> = {
@@ -37,7 +38,7 @@ export function FloorTable({ floors }: FloorTableProps) {
 
   if (floors.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12 text-sm text-gray-500 bg-white border border-border rounded-xl">
+      <div className="flex items-center justify-center py-12 text-body-sm text-stone rounded-xl border border-hairline-soft bg-canvas">
         공실 정보가 없습니다.
       </div>
     );
@@ -48,71 +49,48 @@ export function FloorTable({ floors }: FloorTableProps) {
   };
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-white">
-      {/* 단위 토글 */}
-      <div className="flex justify-end px-4 py-2 border-b border-border bg-surface">
-        <div className="flex rounded-md border border-border overflow-hidden text-sm">
-          <button
-            type="button"
-            onClick={() => setUnit("pyeong")}
-            className={[
-              "px-3 py-1 transition-colors",
-              unit === "pyeong"
-                ? "bg-accent text-white font-medium"
-                : "bg-white text-gray-600 hover:bg-gray-50",
-            ].join(" ")}
-          >
-            평
-          </button>
-          <button
-            type="button"
-            onClick={() => setUnit("sqm")}
-            className={[
-              "px-3 py-1 transition-colors",
-              unit === "sqm"
-                ? "bg-accent text-white font-medium"
-                : "bg-white text-gray-600 hover:bg-gray-50",
-            ].join(" ")}
-          >
-            ㎡
-          </button>
-        </div>
+    <div className="overflow-x-auto rounded-xl border border-hairline-soft bg-canvas">
+      {/* 평/㎡ 단위 토글 */}
+      <div className="flex justify-end gap-1 px-4 py-3 border-b border-hairline-soft bg-surface-soft">
+        <PillTab active={unit === "pyeong"} onClick={() => setUnit("pyeong")}>
+          평
+        </PillTab>
+        <PillTab active={unit === "sqm"} onClick={() => setUnit("sqm")}>
+          ㎡
+        </PillTab>
       </div>
 
       {/* 테이블 */}
-      <table className="w-full text-sm">
+      <table className="w-full">
         <thead>
-          <tr className="bg-surface border-b border-border">
-            <th className="px-4 py-3 text-left font-medium text-gray-700 whitespace-nowrap">층</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-700 whitespace-nowrap">전용면적</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-700 whitespace-nowrap">임대면적</th>
-            <th className="px-4 py-3 text-center font-medium text-gray-700 whitespace-nowrap">입주</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-700 whitespace-nowrap">평당 임대료</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-700 whitespace-nowrap">평당 관리비</th>
+          <tr className="bg-surface-soft border-b border-hairline-soft">
+            <th className="px-4 py-3 text-left text-body-sm font-bold text-ink whitespace-nowrap">층</th>
+            <th className="px-4 py-3 text-right text-body-sm font-bold text-ink whitespace-nowrap">전용면적</th>
+            <th className="px-4 py-3 text-right text-body-sm font-bold text-ink whitespace-nowrap">임대면적</th>
+            <th className="px-4 py-3 text-center text-body-sm font-bold text-ink whitespace-nowrap">입주</th>
+            <th className="px-4 py-3 text-right text-body-sm font-bold text-ink whitespace-nowrap">평당 임대료</th>
+            <th className="px-4 py-3 text-right text-body-sm font-bold text-ink whitespace-nowrap">평당 관리비</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
+        <tbody className="divide-y divide-hairline-soft">
           {floors.map((row, idx) => (
-            <tr
-              key={idx}
-              className="hover:bg-gray-50 transition-colors"
-            >
-              <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+            <tr key={idx} className="hover:bg-surface-soft transition-colors">
+              <td className="px-4 py-3 text-body-sm text-charcoal whitespace-nowrap">
                 {row.floor_label ?? "-"}
               </td>
-              <td className="px-4 py-3 text-right text-gray-700 whitespace-nowrap">
+              <td className="px-4 py-3 text-right text-body-sm text-charcoal whitespace-nowrap">
                 {formatArea(row.exclusive_area_pyeong, row.exclusive_area_sqm)}
               </td>
-              <td className="px-4 py-3 text-right text-gray-700 whitespace-nowrap">
+              <td className="px-4 py-3 text-right text-body-sm text-charcoal whitespace-nowrap">
                 {formatArea(row.lease_area_pyeong, row.lease_area_sqm)}
               </td>
-              <td className="px-4 py-3 text-center text-gray-700 whitespace-nowrap">
+              <td className="px-4 py-3 text-center text-body-sm text-charcoal whitespace-nowrap">
                 {getAvailabilityLabel(row)}
               </td>
-              <td className="px-4 py-3 text-right text-gray-700 whitespace-nowrap">
+              <td className="px-4 py-3 text-right text-body-sm text-ink-deep font-bold whitespace-nowrap">
                 {formatRentManwon(row.rent_per_pyeong)}
               </td>
-              <td className="px-4 py-3 text-right text-gray-700 whitespace-nowrap">
+              <td className="px-4 py-3 text-right text-body-sm text-charcoal whitespace-nowrap">
                 {formatRentManwon(row.maintenance_per_pyeong)}
               </td>
             </tr>
