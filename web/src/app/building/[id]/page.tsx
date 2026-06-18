@@ -13,6 +13,20 @@ import { BuildingOverview } from "@/components/BuildingOverview";
 import { FloorTable } from "@/components/FloorTable";
 import { RentTrendChart } from "@/components/RentTrendChart";
 
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const detail = await fetchBuildingDetail(id);
+  if (!detail) return { title: "건물을 찾을 수 없음" };
+  return {
+    title: detail.name,
+    description: `${detail.name} - ${detail.address_road ?? ""} 오피스 임대 정보, 층별 공실과 임대료를 확인하세요.`,
+  };
+}
+
 export default async function BuildingDetailPage({
   params,
 }: {
