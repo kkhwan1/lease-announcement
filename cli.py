@@ -11,6 +11,7 @@ import json
 import logging
 import re
 import sys
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -256,48 +257,53 @@ def cmd_push(pdf_dir: str, out_dir: str, enrich: bool = False) -> int:
 
     for pdf in pdfs:
         print(f"  처리 중: {pdf.name}")
-        try:
-            source_doc = process_pdf(pdf)
-        except Exception as exc:
-            msg = f"  [파싱 실패] {pdf.name} — {exc}"
-            print(msg, file=sys.stderr)
-            total_errors.append(msg)
-            stats["UNKNOWN"]["files"] += 1
-            stats["UNKNOWN"]["errors"] += 1
-            continue
+        # 이미지 crop PNG의 수명을 store_document 호출 이후까지 보장하기 위해
+        # 임시 디렉토리를 push 루프 안에서 직접 관리한다.
+        with tempfile.TemporaryDirectory(prefix="lease_imgs_") as tmp_img_dir:
+            img_out_dir = Path(tmp_img_dir)
+            try:
+                source_doc = process_pdf(pdf, img_out_dir=img_out_dir)
+            except Exception as exc:
+                msg = f"  [파싱 실패] {pdf.name} — {exc}"
+                print(msg, file=sys.stderr)
+                total_errors.append(msg)
+                stats["UNKNOWN"]["files"] += 1
+                stats["UNKNOWN"]["errors"] += 1
+                continue
 
-        bcode = source_doc.broker.value
-        stats[bcode]["files"] += 1
+            bcode = source_doc.broker.value
+            stats[bcode]["files"] += 1
 
-        # 건축물대장 API 보강 (빈 필드만 채움, graceful — 실패해도 적재 진행)
-        if enrichers:
-            for i, bld in enumerate(source_doc.buildings):
-                try:
-                    source_doc.buildings[i] = apply_enrichers(bld, enrichers)
-                except Exception as exc:
-                    print(f"    [보강 실패] {bld.building_name} — {exc}", file=sys.stderr)
+            # 건축물대장 API 보강 (빈 필드만 채움, graceful — 실패해도 적재 진행)
+            if enrichers:
+                for i, bld in enumerate(source_doc.buildings):
+                    try:
+                        source_doc.buildings[i] = apply_enrichers(bld, enrichers)
+                    except Exception as exc:
+                        print(f"    [보강 실패] {bld.building_name} — {exc}", file=sys.stderr)
 
-        try:
-            result = store_document(source_doc, source_doc.buildings)
-        except Exception as exc:
-            msg = f"  [적재 실패] {pdf.name} — {exc}"
-            print(msg, file=sys.stderr)
-            total_errors.append(msg)
-            stats[bcode]["errors"] += 1
-            continue
+            try:
+                result = store_document(source_doc, source_doc.buildings)
+            except Exception as exc:
+                msg = f"  [적재 실패] {pdf.name} — {exc}"
+                print(msg, file=sys.stderr)
+                total_errors.append(msg)
+                stats[bcode]["errors"] += 1
+                continue
 
-        stats[bcode]["buildings_new"] += result.get("buildings_new", 0)
-        stats[bcode]["buildings_matched"] += result.get("buildings_matched", 0)
-        stats[bcode]["buildings_queued"] += result.get("buildings_queued", 0)
-        stats[bcode]["errors"] += len(result.get("errors", []))
+            stats[bcode]["buildings_new"] += result.get("buildings_new", 0)
+            stats[bcode]["buildings_matched"] += result.get("buildings_matched", 0)
+            stats[bcode]["buildings_queued"] += result.get("buildings_queued", 0)
+            stats[bcode]["errors"] += len(result.get("errors", []))
 
-        print(
-            f"    건물: {result['buildings_processed']}개"
-            f" (신규={result.get('buildings_new', 0)}"
-            f", 매칭={result.get('buildings_matched', 0)}"
-            f", 큐={result.get('buildings_queued', 0)})"
-            f" 오류={len(result.get('errors', []))}"
-        )
+            print(
+                f"    건물: {result['buildings_processed']}개"
+                f" (신규={result.get('buildings_new', 0)}"
+                f", 매칭={result.get('buildings_matched', 0)}"
+                f", 큐={result.get('buildings_queued', 0)})"
+                f" 오류={len(result.get('errors', []))}"
+            )
+            # with 블록 종료 시 tmp_img_dir 자동 삭제 (Storage 업로드 완료 후)
 
     # 통계 테이블 출력
     print("\n" + "=" * 72)

@@ -318,26 +318,109 @@ def _replace_rent_terms(
         )
 
 
+_BUCKET_NAME = "building-images"
+
+
+def _ensure_bucket(client: Client) -> None:
+    """'building-images' 버킷이 없으면 private 버킷으로 생성.
+
+    멱등 — 이미 존재하면 아무것도 하지 않는다.
+    """
+    try:
+        buckets = client.storage.list_buckets()
+        existing = {b.name for b in buckets}
+        if _BUCKET_NAME not in existing:
+            client.storage.create_bucket(_BUCKET_NAME, options={"public": False})
+            logger.info("Storage 버킷 생성: %s (private)", _BUCKET_NAME)
+        else:
+            logger.debug("Storage 버킷 이미 존재: %s", _BUCKET_NAME)
+    except Exception as exc:
+        # 버킷 생성 실패는 경고만 — 이미 존재할 경우 409가 오기도 함
+        logger.warning("버킷 확인/생성 실패 (이미 있으면 무시): %s", exc)
+
+
+def _upload_image_to_storage(
+    client: Client,
+    storage_path: str,
+    local_file_path: str,
+) -> bool:
+    """로컬 PNG 파일을 Supabase Storage에 업로드.
+
+    Args:
+        storage_path: Storage 내 경로 (버킷 이름 제외)
+        local_file_path: 로컬 crop PNG 절대경로
+
+    Returns:
+        True = 업로드 성공, False = 실패(경고 로깅)
+    """
+    from pathlib import Path as _Path
+
+    local_path = _Path(local_file_path)
+    if not local_path.exists():
+        logger.warning("이미지 파일 없음 (업로드 건너뜀): %s", local_file_path)
+        return False
+
+    try:
+        with open(local_path, "rb") as f:
+            data = f.read()
+        # upsert=True: 동일 경로 재실행 시 덮어씀 (멱등)
+        client.storage.from_(_BUCKET_NAME).upload(
+            path=storage_path,
+            file=data,
+            file_options={"content-type": "image/png", "upsert": "true"},
+        )
+        logger.debug("Storage 업로드 완료: %s/%s", _BUCKET_NAME, storage_path)
+        return True
+    except Exception as exc:
+        logger.warning("Storage 업로드 실패 (%s): %s", storage_path, exc)
+        return False
+
+
 def _upsert_building_images(
     client: Client,
     building_id: str,
     source_document_id: str,
     b: BuildingExtraction,
 ) -> None:
-    """building_images upsert. storage_path 고유키."""
+    """building_images upsert. storage_path 고유키.
+
+    흐름:
+      1) 버킷 존재 확인/생성 (최초 1회)
+      2) 이미지별로 Storage 업로드 (로컬 file_path → Storage)
+      3) building_images 테이블에 메타 upsert (storage_path 멱등)
+    """
     if not b.images:
         return
+
+    # 버킷이 없으면 생성 (멱등)
+    _ensure_bucket(client)
 
     broker_code = b.broker.value
     period = (b.source_month or "unknown").replace("-", "")
 
     rows = []
-    for img in b.images:
-        # storage_path 규약: {broker}/{period}/{building_id}/{kind}_p{page}.png
+    upload_ok = 0
+    upload_skip = 0
+
+    for img_idx, img in enumerate(b.images):
+        # storage_path 규약: {broker}/{period}/{building_id}/{kind}_p{page}_{idx}.png
+        # idx를 붙여 같은 페이지에 동종 이미지가 여럿 있어도 경로 충돌 방지
         storage_path = (
             f"{broker_code}/{period}/{building_id}"
-            f"/{img.kind.value}_p{str(img.page_number).zfill(3)}.png"
+            f"/{img.kind.value}_p{str(img.page_number).zfill(3)}_{img_idx:02d}.png"
         )
+
+        # Storage 업로드 (file_path가 있는 경우만 — pipeline이 임시 dir에 저장한 PNG)
+        if img.file_path:
+            success = _upload_image_to_storage(client, storage_path, img.file_path)
+            if success:
+                upload_ok += 1
+            else:
+                upload_skip += 1
+        else:
+            # file_path 없음 = 메타만 저장 (Storage 업로드 생략)
+            upload_skip += 1
+
         row: dict[str, Any] = {
             "building_id": building_id,
             "source_document_id": source_document_id,
@@ -361,8 +444,9 @@ def _upsert_building_images(
             on_conflict="storage_path",
             ignore_duplicates=True,
         ).execute()
-        logger.debug(
-            "building_id=%s: building_images %d행 upsert", building_id, len(rows)
+        logger.info(
+            "building_id=%s: building_images %d행 upsert (Storage 업로드 성공=%d, 건너뜀=%d)",
+            building_id, len(rows), upload_ok, upload_skip,
         )
 
 

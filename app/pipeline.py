@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import logging
+import tempfile
 import warnings
 from pathlib import Path
 from typing import Optional
@@ -18,6 +19,7 @@ import fitz  # PyMuPDF
 
 from app.classify_pages import classify_page
 from app.group_buildings import group_pages
+from app.image_extractor import extract_images
 from app.ingest import compute_sha256, extract_source_month, identify_broker
 from app.schemas import BrokerCode, BuildingExtraction, SourceDocument
 from app.adapters.oscar import OscarTableAdapter
@@ -47,11 +49,18 @@ def _should_skip(building_name: str) -> bool:
     return any(building_name.startswith(p) for p in _SKIP_PREFIXES)
 
 
-def process_pdf(pdf_path: str | Path) -> SourceDocument:
+def process_pdf(
+    pdf_path: str | Path,
+    img_out_dir: Optional[Path] = None,
+) -> SourceDocument:
     """PDF 한 건을 처리해 SourceDocument를 반환.
 
     Args:
         pdf_path: 처리할 PDF 파일 경로
+        img_out_dir: 이미지 crop PNG를 저장할 디렉토리.
+            None이면 임시 디렉토리를 사용하지 않고 이미지 메타만 추출
+            (file_path=None → Storage 업로드 불가).
+            호출자가 지정하면 해당 경로의 수명을 호출자가 책임진다.
 
     Returns:
         SourceDocument — broker/filename/sha256/source_month/page_count/buildings
@@ -94,6 +103,7 @@ def process_pdf(pdf_path: str | Path) -> SourceDocument:
         logger.warning("[pipeline] 미지원 중개사: %s → buildings=[]", broker)
     else:
         adapter = adapter_cls()
+
         for group in groups:
             # 목차·표지 그룹 skip
             if _should_skip(group.building_name):
@@ -103,6 +113,26 @@ def process_pdf(pdf_path: str | Path) -> SourceDocument:
                 extraction = adapter.extract(
                     doc, group, source_filename, source_month
                 )
+
+                # 5. 이미지 추출 — 건물별 서브 디렉토리에 crop PNG 저장
+                #    img_out_dir이 지정된 경우에만 파일 저장 (Storage 업로드용)
+                #    Storage 업로드는 supa_store._upsert_building_images에서 처리
+                safe_name = group.building_name.replace("/", "-").replace(" ", "_")
+                building_img_dir = (img_out_dir / safe_name) if img_out_dir else None
+                try:
+                    images = extract_images(doc, group, out_dir=building_img_dir)
+                    extraction.images = images
+                    logger.info(
+                        "  이미지 추출: %s → %d개",
+                        extraction.building_name, len(images),
+                    )
+                except Exception as img_exc:
+                    # 이미지 추출 실패는 경고만 — 텍스트 데이터 적재는 계속
+                    logger.warning(
+                        "  이미지 추출 실패 (건물 적재는 계속): %s — %s",
+                        group.building_name, img_exc,
+                    )
+
                 buildings.append(extraction)
                 logger.info("  추출 완료: %s (floors=%d)", extraction.building_name, len(extraction.floors))
             except Exception as exc:
