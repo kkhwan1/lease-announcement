@@ -17,7 +17,7 @@ from typing import Optional
 
 from rapidfuzz import fuzz
 
-from app.normalize import building_match_key
+from app.normalize import building_match_key, address_match_key
 from app.schemas import BuildingExtraction
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,19 @@ logger = logging.getLogger(__name__)
 # Entity Resolution 임계값 (사용자 결정 2026-06-18)
 _THRESHOLD_AUTO = 0.92   # 이상 → 자동 매칭
 _THRESHOLD_QUEUE = 0.80  # 이상 → 큐 등록 (회색지대)
+
+
+def compute_match_key(b: BuildingExtraction) -> str:
+    """건물 1차 식별 키 — 주소 우선(사용자 결정), 없으면 건물명.
+
+    주소가 있으면 'addr:강남대로374', 없으면 'name:케이스퀘어강남2' 형태로
+    네임스페이스를 구분해 주소키와 이름키가 우연히 겹치지 않게 한다.
+    """
+    addr = b.address_match_key or (address_match_key(b.address_raw) if b.address_raw else "")
+    if addr:
+        return f"addr:{addr}"
+    name_key = building_match_key(b.building_name)
+    return f"name:{name_key}" if name_key else ""
 
 
 def resolve_building(
@@ -43,30 +56,30 @@ def resolve_building(
         (building_id, is_new, status)
         - status: 'matched_address' | 'matched_name' | 'new' | 'queued'
     """
-    # ── 1차: 주소 매칭키로 건물 검색 ──────────────────────────────────────
-    addr_key = b.address_match_key
-    if addr_key:
+    # ── 1차: match_key(주소 우선)로 건물 검색 ────────────────────────────
+    mkey = compute_match_key(b)
+    if mkey:
         result = (
             client.table("buildings")
-            .select("id, name, identity_key")
-            .eq("identity_key", addr_key)
+            .select("id, name")
+            .eq("match_key", mkey)
             .limit(1)
             .execute()
         )
         if result.data:
             building_id = result.data[0]["id"]
-            logger.debug(
-                "주소키 매칭: %s → building_id=%s", addr_key, building_id
-            )
-            return building_id, False, "matched_address"
+            logger.debug("match_key 매칭: %s → building_id=%s", mkey, building_id)
+            # 주소 기반 키면 'matched_address', 이름 기반이면 'matched_name'
+            status = "matched_address" if mkey.startswith("addr:") else "matched_name"
+            return building_id, False, status
 
-    # ── 2차: 건물명 fuzzy 유사도 검색 ────────────────────────────────────
+    # ── 2차: 건물명 fuzzy 유사도 검색 (주소 다른 동일 건물 보강) ──────────
     match_key = building_match_key(b.building_name)
     if match_key:
         # buildings 테이블 전체를 가져와 fuzzy 비교 (건물 수가 적어 허용)
         all_buildings = (
             client.table("buildings")
-            .select("id, name, identity_key")
+            .select("id, name")
             .execute()
         )
 
@@ -134,9 +147,25 @@ def _insert_building(client, b: BuildingExtraction) -> str:
         "parking_total": b.parking_total,
         "parking_terms_raw": b.parking_terms_raw,
         "features_raw": b.features_raw,
+        "match_key": compute_match_key(b) or None,
     }
     # None 값은 DB 기본값에 맡김 (불필요한 null 전송 최소화)
     payload = {k: v for k, v in payload.items() if v is not None}
+
+    mkey = payload.get("match_key")
+    if mkey:
+        # match_key 충돌 시(동일 건물 재등장) 기존 행 반환 — 멱등.
+        result = client.table("buildings").upsert(
+            payload, on_conflict="match_key", ignore_duplicates=True,
+        ).execute()
+        if result.data:
+            return result.data[0]["id"]
+        # ignore_duplicates로 data가 비면 기존 행 조회
+        existing = (
+            client.table("buildings").select("id").eq("match_key", mkey).limit(1).execute()
+        )
+        if existing.data:
+            return existing.data[0]["id"]
 
     result = client.table("buildings").insert(payload).execute()
     if not result.data:

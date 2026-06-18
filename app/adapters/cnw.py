@@ -66,6 +66,10 @@ class CnWTableAdapter(ExtractorAdapter):
             extraction_method="rule_table",
         )
 
+        # C&W는 상세 페이지 헤더(20pt)에 '건물명[전속] 주소'가 한 줄로 있다.
+        # group_buildings는 건물명만 분리했으므로, 여기서 주소를 별도로 추출한다.
+        self._extract_address(doc, page_group, b)
+
         for idx in page_group.page_indices:
             page = doc[idx]
             try:
@@ -84,6 +88,36 @@ class CnWTableAdapter(ExtractorAdapter):
 
         self._finalize(b)
         return b
+
+    # ------------------------------------------------------------------
+    # 주소 추출 (C&W 헤더 줄에서 '건물명[전속] 주소' → 주소 분리)
+    # ------------------------------------------------------------------
+    _ADDR_START = re.compile(
+        r"(서울(?:특별)?시|경기도?|인천(?:광역)?시|부산(?:광역)?시|대구(?:광역)?시"
+        r"|대전(?:광역)?시|광주(?:광역)?시|울산(?:광역)?시|세종(?:특별자치)?시).*"
+    )
+
+    def _extract_address(self, doc, page_group, b: BuildingExtraction) -> None:
+        from app.normalize import normalize_address, address_match_key
+
+        for idx in page_group.page_indices:
+            page = doc[idx]
+            try:
+                blocks = page.get_text("dict")["blocks"]
+            except Exception:
+                continue
+            for blk in blocks:
+                if blk.get("type") != 0:
+                    continue
+                for ln in blk.get("lines", []):
+                    txt = "".join(s.get("text", "") for s in ln.get("spans", [])).strip()
+                    m = self._ADDR_START.search(txt)
+                    if m:
+                        addr = m.group(0).strip()
+                        b.address_raw = addr
+                        b.address_road = normalize_address(addr)
+                        b.address_match_key = address_match_key(addr)
+                        return  # 첫 주소만
 
     @staticmethod
     def _classify_table(rows: list[list]) -> Optional[str]:
