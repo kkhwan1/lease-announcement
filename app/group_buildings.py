@@ -57,27 +57,33 @@ _EXCLUDE_KEYWORDS = {
 _PHONE_RE = re.compile(r"\d{2,4}[.\-]\d{3,4}[.\-]\d{4}")   # 010.1234.5678
 _STARTS_NUMBER_RE = re.compile(r"^[\d,.\s]+")               # 숫자/콤마로 시작 (금액·면적)
 
-# C&W 건물명 주소 분리 — 두 단계 패턴
-# 단계1: '[태그] 주소' 형태 → 태그 앞에서 자름
-#   예: '세미콜론수송[전속] 서울시...' → 태그 바로 앞 공백에서 자름
-_CW_TAG_THEN_ADDR = re.compile(
-    r"\s*\[[^\]]*\]"                    # 공백? + [태그]
-    r"\s*"                              # 공백
-    r"(?="                              # 이후 주소 lookahead
+# C&W 건물명 주소 분리 — 세 단계 패턴
+# 주소 시도 패턴 (lookahead 공유)
+_ADDR_SIDO = (
     r"서울(?:특별)?시|경기도?|인천(?:광역)?시|부산(?:광역)?시"
     r"|대구(?:광역)?시|대전(?:광역)?시|광주(?:광역)?시"
     r"|울산(?:광역)?시|세종(?:특별자치)?시"
-    r")"
 )
-# 단계2: '[태그] 없이' 공백 + 주소 형태 → 공백 앞에서 자름
-#   예: '서울시티타워[전속] 서울시...' 에서 태그 제거 후 '서울시티타워 서울시...'
+
+# 단계1: '[태그] 주소' 형태 → 태그 앞에서 자름
+#   예: '세미콜론수송[전속] 서울시...'
+_CW_TAG_THEN_ADDR = re.compile(
+    r"\s*\[[^\]]*\]\s*"                 # 공백? + [태그] + 공백?
+    r"(?=" + _ADDR_SIDO + r")"
+)
+
+# 단계2: 태그 제거 후 공백 + 주소 형태
+#   예: '서울시티타워 서울시...' (태그 제거 후)
 _CW_SPACE_THEN_ADDR = re.compile(
-    r"\s+"                              # 공백 1개 이상
-    r"(?="                              # 이후 주소 lookahead (행정구역 단위)
-    r"서울(?:특별)?시|경기도?|인천(?:광역)?시|부산(?:광역)?시"
-    r"|대구(?:광역)?시|대전(?:광역)?시|광주(?:광역)?시"
-    r"|울산(?:광역)?시|세종(?:특별자치)?시"
-    r")"
+    r"\s+(?=" + _ADDR_SIDO + r")"
+)
+
+# 단계3: 공백 없이 건물명+주소가 바로 붙어있는 형태
+#   예: '광화문도반빌딩서울시중구...' → '서울시' 등 시도 이름이 직접 연결
+#   한글 건물명 뒤에 바로 '서울시'가 오는 위치를 찾음 (공백 없음)
+_CW_NO_SPACE_ADDR = re.compile(
+    r"(?<=[가-힣A-Za-z0-9\)])"         # 건물명 끝 문자 뒤
+    r"(?=" + _ADDR_SIDO + r")"         # 바로 주소가 시작
 )
 
 
@@ -106,23 +112,49 @@ def _is_valid_building_name(name: str) -> bool:
         "lists", "team", "조직", "인원구성",
     )):
         return False
+    # S1 아티팩트: '전용45.05Py셔틀셔틀EV' 형태 (면적+단위+설비 텍스트 연결)
+    # 'Py' = 평(坪) 단위, 숫자+Py 패턴은 건물명이 아님
+    if re.search(r"\d+(?:\.\d+)?Py", s):
+        return False
+    # '매각', '임대' 같은 단일 동사(2자 이하 한글만) 거부
+    if re.fullmatch(r"[가-힣]{1,2}", s):
+        return False
     return True
 
 
 def _strip_cw_address(name: str) -> str:
     """C&W 건물명에 붙어있는 주소 부분 제거.
 
-    예: '세미콜론수송[전속] 서울시종로구율곡로 2길19'
-        → '세미콜론수송'
-    주소 분리 후 [전속] 등 태그도 정리한다.
+    처리 케이스:
+      A) '[태그] 주소' 형태 — 태그 앞에서 자름
+         '세미콜론수송[전속] 서울시...' → '세미콜론수송'
+         '그랑서울타워1 [전속] 서울시...' → '그랑서울타워1'
+      B) 태그 제거 후 '공백 주소' — 공백 앞에서 자름
+         '서울시티타워[전속] 서울시...' → (태그 제거) → '서울시티타워 서울시...'
+         → '서울시티타워'
+      C) 공백 없이 건물명+주소가 연결된 형태 — 주소 시작점에서 자름
+         '광화문도반빌딩서울시중구...' → '광화문도반빌딩'
+
     cnw.py 어댑터에서 원문 주소를 별도 처리하므로 여기서는 건물명만 반환.
     """
-    m = _CW_ADDRESS_SUFFIX.search(name)
+    # 단계 1: '[태그] + 주소' 패턴 → 태그 앞에서 자름
+    m = _CW_TAG_THEN_ADDR.search(name)
     if m and m.start() > 0:
-        name = name[: m.start()]
-    # 남은 [전속], [단독전속] 태그 제거
-    name = re.sub(r"\s*\[[^\]]*\]\s*$", "", name).strip()
-    return name
+        return name[: m.start()].strip()
+
+    # 단계 2: '[태그]' 제거 후 '공백 주소' 패턴 → 주소 앞 공백에서 자름
+    without_tags = re.sub(r"\s*\[[^\]]*\]", "", name)
+    m2 = _CW_SPACE_THEN_ADDR.search(without_tags)
+    if m2 and m2.start() > 0:
+        return without_tags[: m2.start()].strip()
+
+    # 단계 3: 공백 없이 바로 주소가 붙어있는 형태 → 주소 시작점에서 자름
+    m3 = _CW_NO_SPACE_ADDR.search(without_tags)
+    if m3 and m3.start() > 0:
+        return without_tags[: m3.start()].strip()
+
+    # 주소 분리 불필요 (일반 건물명) — 혹시 남은 태그만 정리
+    return re.sub(r"\s*\[[^\]]*\]\s*$", "", name).strip()
 
 
 def extract_building_name(page: fitz.Page) -> Optional[str]:

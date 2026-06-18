@@ -46,13 +46,18 @@ def get_client() -> Client:
     """Supabase 클라이언트 반환 (최초 1회 초기화).
 
     RLS가 authenticated role만 허용하므로 service_role key를 우선 사용.
-    SUPABASE_SERVICE_KEY 없으면 SUPABASE_ANON_KEY fallback (개발용).
+    키 이름은 Supabase 공식 명칭(SUPABASE_SERVICE_ROLE_KEY)을 우선하되,
+    축약형(SUPABASE_SERVICE_KEY)도 호환. 둘 다 없으면 ANON_KEY fallback(개발용).
     """
     global _client
     if _client is None:
         url = os.environ["SUPABASE_URL"]
         # service_role key: RLS bypass — 파이프라인 서버 전용
-        key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ["SUPABASE_ANON_KEY"]
+        key = (
+            os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+            or os.environ.get("SUPABASE_SERVICE_KEY")
+            or os.environ["SUPABASE_ANON_KEY"]
+        )
         _client = create_client(url, key)
     return _client
 
@@ -388,6 +393,54 @@ def _promote_raw_extraction(
     }).eq("id", raw_extraction_id).execute()
 
 
+def _get_or_create_enrich_source_doc(
+    client: Client,
+    broker_id: str,
+    source_month: Optional[str],
+) -> Optional[str]:
+    """보강(enrich) 전용 가상 source_documents 행 id 반환.
+
+    건축물대장 API 등 보강값을 building_field_values에 PDF와 분리해 저장하기
+    위해 "가상 문서" 1건을 month 단위로 생성(또는 조회)한다.
+    file_sha256 = 'enrich:{broker_id}:{YYYY-MM}' 으로 멱등 보장.
+
+    broker_id가 None이면 None 반환 (enrich 행을 PDF 행에 합산).
+    """
+    issue_period = _source_month_to_date(source_month)
+    month_label = source_month or "unknown"
+    # 멱등 키: broker × month 고정 문자열 (SHA256 컬럼에 저장)
+    virtual_sha = f"enrich:{broker_id}:{month_label}"
+
+    result = (
+        client.table("source_documents")
+        .select("id")
+        .eq("file_sha256", virtual_sha)
+        .limit(1)
+        .execute()
+    )
+    if result.data:
+        return result.data[0]["id"]
+
+    # 없으면 생성
+    payload: dict[str, Any] = {
+        "broker_id": broker_id,
+        "filename": f"[enrich] building_register {month_label}",
+        "file_sha256": virtual_sha,
+        "page_count": 0,
+        "parse_status": "parsed",
+    }
+    if issue_period:
+        payload["issue_period"] = issue_period
+
+    ins = client.table("source_documents").insert(payload).execute()
+    if not ins.data:
+        logger.warning("enrich 가상 source_document 생성 실패 — enrich 필드는 PDF 행에 합산")
+        return None
+    enrich_doc_id = ins.data[0]["id"]
+    logger.debug("enrich 가상 source_document 생성: id=%s (%s)", enrich_doc_id, virtual_sha)
+    return enrich_doc_id
+
+
 # ---------------------------------------------------------------------------
 # 공개 API
 # ---------------------------------------------------------------------------
@@ -508,12 +561,24 @@ def _store_single_building(
         _upsert_building_alias(client, building_id, broker_id, alias_raw, alias_normalized)
 
     # e. merge_fields → building_field_values + buildings 마스터 갱신
+    # 보강 필드가 있으면 enrich 전용 가상 source_document 생성 (PDF 행과 분리)
+    has_enrich_fields = any(
+        src != "pdf_parse"
+        for src in b.field_sources.values()
+    )
+    enrich_source_document_id: Optional[str] = None
+    if has_enrich_fields:
+        enrich_source_document_id = _get_or_create_enrich_source_doc(
+            client, broker_id, b.source_month
+        )
+
     merge_fields(
         client=client,
         building_id=building_id,
         b=b,
-        source_document_id=source_document_id,
+        pdf_source_document_id=source_document_id,
         broker_id=broker_id,
+        enrich_source_document_id=enrich_source_document_id,
     )
 
     # f. listing_snapshots upsert
