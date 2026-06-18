@@ -98,8 +98,11 @@ class BuildingExtraction(BaseModel):
     address_road: Optional[str] = None           # 도로명
     address_jibun: Optional[str] = None          # 지번
     address_raw: Optional[str] = None
+    address_match_key: Optional[str] = None      # 도로명+번호 정규화 키 (Entity Resolution 1차 키)
     district: Optional[BusinessDistrict] = None
     station_area: Optional[str] = None           # '강남역'
+    latitude: Optional[float] = None             # 보강(지오코딩) 대비
+    longitude: Optional[float] = None
 
     # 물리 스펙 (㎡ 정규화 + 평 원문)
     floors_above: Optional[int] = None
@@ -118,6 +121,14 @@ class BuildingExtraction(BaseModel):
     parking_terms_raw: Optional[str] = None
     features_raw: Optional[str] = None            # 특장점
 
+    # 건축물대장 보강 대비 필드 (PDF엔 없지만 API로 채울 수 있음)
+    main_purpose: Optional[str] = None           # 주용도 (업무시설 등)
+    building_coverage_ratio: Optional[float] = None  # 건폐율 %
+    floor_area_ratio: Optional[float] = None     # 용적률 %
+    height_m: Optional[float] = None             # 건물 높이
+    land_area_sqm: Optional[float] = None        # 대지면적
+    use_zone: Optional[str] = None               # 용도지역 (일반상업지역 등)
+
     # 자식 컬렉션
     floors: list[FloorAvailability] = Field(default_factory=list)
     rents: list[RentTerm] = Field(default_factory=list)
@@ -127,6 +138,20 @@ class BuildingExtraction(BaseModel):
     extraction_method: str = "rule_table"        # rule_table | section_text | vision | ocr
     confidence: float = 1.0
     warnings: list[str] = Field(default_factory=list)
+
+    # 필드별 출처 추적 (provenance). {필드명: 'pdf_parse'|'building_register'|'manual'|...}
+    # PDF 추출 필드는 채워질 때 'pdf_parse', 보강(enrich) 시 해당 소스명으로 덮어쓰지 않고 빈 필드만 채움.
+    field_sources: dict[str, str] = Field(default_factory=dict)
+
+    def missing_fields(self) -> list[str]:
+        """보강 후보 — 값이 비어있는 핵심 물리 스펙 필드 목록."""
+        candidates = [
+            "address_road", "gross_area_sqm", "floors_above", "floors_below",
+            "completed_year", "efficiency_ratio", "parking_total",
+            "main_purpose", "building_coverage_ratio", "floor_area_ratio",
+            "height_m", "land_area_sqm", "use_zone", "latitude", "longitude",
+        ]
+        return [f for f in candidates if getattr(self, f, None) in (None, "", [])]
 
 
 class SourceDocument(BaseModel):

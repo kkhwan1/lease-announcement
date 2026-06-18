@@ -1,15 +1,7 @@
-# 환경 변수 / 시크릿
-.env
-.env.*
-!.env.example
-
-# MCP 설정에 액세스 토큰이 포함됨 — 커밋 금지
-.mcp.json
-
-# 의존성 / 빌드 산출물
-node_modules/
+.venv/
 __pycache__/
 *.pyc
-.venv/
-dist/
-.next/
+.env
+out/
+worktree/
+Raw/*.pdf
