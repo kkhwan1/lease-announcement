@@ -66,6 +66,18 @@ export default async function BuildingDetailPage({
         {detail.address_road && (
           <p className="text-subtitle-md text-steel">{detail.address_road}</p>
         )}
+        {/* 데이터 기준월 — trend 최신 snapshot_month 기준. 비었으면 생략. */}
+        {trend.length > 0 && (() => {
+          // snapshot_month는 YYYY-MM-DD. 사전순 최대값이 곧 최신월.
+          const latest = trend.reduce((a, b) =>
+            a.snapshot_month > b.snapshot_month ? a : b
+          ).snapshot_month;
+          // YYYY-MM-DD → YYYY.MM
+          const label = latest.slice(0, 7).replace("-", ".");
+          return (
+            <p className="mt-1 text-caption text-stone">{label} 기준</p>
+          );
+        })()}
       </div>
 
       {/* 상단 2단 — 왼쪽 사진(7) / 오른쪽 건물개요(5). 모바일은 1단 세로. */}

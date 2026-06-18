@@ -33,6 +33,26 @@ interface FloorTableProps {
 
 type AreaUnit = "pyeong" | "sqm";
 
+// 즉시입주 여부: availability_kind==='immediate' 또는 availability_raw에 '즉시' 포함
+function isImmediate(row: FloorVacancy): boolean {
+  if (row.availability_kind === "immediate") return true;
+  if (row.availability_raw && row.availability_raw.includes("즉시")) return true;
+  return false;
+}
+
+// 층 정렬: floor_number 내림차순, null이면 floor_label 보조(문자열 내림차순)
+function sortByFloor(a: FloorVacancy, b: FloorVacancy): number {
+  const aNum = a.floor_number;
+  const bNum = b.floor_number;
+  if (aNum !== null && bNum !== null) return bNum - aNum;
+  if (aNum !== null) return -1; // 숫자 있는 쪽 우선
+  if (bNum !== null) return 1;
+  // 둘 다 null → floor_label 내림차순
+  const aLabel = a.floor_label ?? "";
+  const bLabel = b.floor_label ?? "";
+  return bLabel.localeCompare(aLabel, "ko");
+}
+
 export function FloorTable({ floors }: FloorTableProps) {
   const [unit, setUnit] = useState<AreaUnit>("pyeong");
 
@@ -44,12 +64,26 @@ export function FloorTable({ floors }: FloorTableProps) {
     );
   }
 
+  // 층 내림차순 정렬 (원본 배열 변경 없이 복사 후 정렬)
+  const sorted = [...floors].sort(sortByFloor);
+
+  // 요약 집계
+  const totalCount = floors.length;
+  const immediateCount = floors.filter(isImmediate).length;
+
   const formatArea = (pyeong: string | null, sqm: string | null): string => {
     return unit === "pyeong" ? formatPyeong(pyeong) : formatSqm(sqm);
   };
 
   return (
     <div className="overflow-x-auto rounded-xl border border-hairline-soft bg-canvas">
+      {/* 요약 한 줄 */}
+      <div className="px-4 py-2 border-b border-hairline-soft bg-surface-soft">
+        <span className="text-body-sm text-steel">
+          총 공실 {totalCount}개 · 즉시입주 {immediateCount}개
+        </span>
+      </div>
+
       {/* 평/㎡ 단위 토글 */}
       <div className="flex justify-end gap-1 px-4 py-3 border-b border-hairline-soft bg-surface-soft">
         <PillTab active={unit === "pyeong"} onClick={() => setUnit("pyeong")}>
@@ -73,7 +107,7 @@ export function FloorTable({ floors }: FloorTableProps) {
           </tr>
         </thead>
         <tbody className="divide-y divide-hairline-soft">
-          {floors.map((row, idx) => (
+          {sorted.map((row, idx) => (
             <tr key={idx} className="hover:bg-surface-soft transition-colors">
               <td className="px-4 py-3 text-body-sm text-charcoal whitespace-nowrap">
                 {row.floor_label ?? "-"}
