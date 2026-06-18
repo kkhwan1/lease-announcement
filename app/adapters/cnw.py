@@ -92,9 +92,11 @@ class CnWTableAdapter(ExtractorAdapter):
     # ------------------------------------------------------------------
     # 주소 추출 (C&W 헤더 줄에서 '건물명[전속] 주소' → 주소 분리)
     # ------------------------------------------------------------------
+    # 시 표기형(서울시) + 시 생략 후 바로 구가 오는 형(서울서초구) 모두 대응
     _ADDR_START = re.compile(
         r"(서울(?:특별)?시|경기도?|인천(?:광역)?시|부산(?:광역)?시|대구(?:광역)?시"
-        r"|대전(?:광역)?시|광주(?:광역)?시|울산(?:광역)?시|세종(?:특별자치)?시).*"
+        r"|대전(?:광역)?시|광주(?:광역)?시|울산(?:광역)?시|세종(?:특별자치)?시"
+        r"|(?:서울|부산|인천|대구|대전|광주|울산)[가-힣]{1,4}구).*"
     )
 
     def _extract_address(self, doc, page_group, b: BuildingExtraction) -> None:
@@ -171,8 +173,9 @@ class CnWTableAdapter(ExtractorAdapter):
             if m:
                 b.ceiling_height_m = float(m.group(1))
         if (v := get("준공", "준공년도", "준공연도")):
+            from app.normalize import parse_completed_year
             b.completed_raw = v
-            b.completed_year = _to_int(v)
+            b.completed_year = parse_completed_year(v)
         if (v := get("엘리베이터", "E/V", "EV")):
             b.ev_count = _to_int(v)
         if (v := get("주차")):
@@ -183,10 +186,42 @@ class CnWTableAdapter(ExtractorAdapter):
 
         b.district = classify_district(" ".join(filter(None, [b.address_raw, b.features_raw])))
 
+    # 총액 헤더 키워드: 이 단어가 컬럼 헤더에 있으면 해당 컬럼은 평당이 아니라 총액.
+    # - '총월임대료/총임대료/총보증금/총액': C&W 일부 건물의 명시적 총액 헤더
+    # - '층별보증금/층별임대료/층별월임대료/층별관리비/층별월관리비': "층별" 접두사가 붙은
+    #   헤더도 그 층/구간 전체 총액임 (예: 일월스타빌딩 '층별월임대료', 에하드빌딩 '층별보증금')
+    _TOTAL_AMOUNT_KEYWORDS = (
+        "총월임대료", "총임대료", "총보증금", "총액",
+        "층별보증금", "층별임대료", "층별월임대료",
+        "층별관리비", "층별월관리비",
+    )
+
+    @staticmethod
+    def _is_total_amount_header(header_cell: str) -> bool:
+        """헤더 셀이 '총월임대료/총임대료/총보증금/총액' 등 총액 컬럼인지 판별."""
+        h = header_cell.replace(" ", "")
+        return any(kw in h for kw in CnWTableAdapter._TOTAL_AMOUNT_KEYWORDS)
+
+    @staticmethod
+    def _total_to_per_pyeong(
+        total_amount: Optional[float],
+        lease_area_pyeong: Optional[float],
+    ) -> Optional[float]:
+        """총액을 임대면적(평)으로 나눠 평당 단가로 환산. 면적이 없으면 None."""
+        if total_amount is None or not lease_area_pyeong:
+            return None
+        return round(total_amount / lease_area_pyeong, 2)
+
     def _parse_floor_rent_table(self, rows: list[list], b: BuildingExtraction) -> None:
         """층별 공실 + 임대조건 통합표 (헤더: 층수/임대면적/전용면적/입주가능시기/보증금/임대료/관리비).
 
         C&W는 보증금 열이 없는 경우도 있음(임대료/관리비만). '다음페이지참조' 행은 skip.
+
+        총액 처리:
+        - 헤더가 '총월임대료/총임대료/총보증금/총액'이면 → 값이 총액임.
+          같은 행의 임대면적으로 나눠 평당 단가를 복원하고, 원본은 terms_raw에 보존.
+        - scope_label이 '합계/계/소계/통임대/Total'인 행 → 평당 신뢰 불가,
+          rent_per_pyeong / deposit_per_pyeong을 NULL(None)로 두고 terms_raw만 보존.
         """
         if len(rows) < 2:
             return
@@ -208,6 +243,32 @@ class CnWTableAdapter(ExtractorAdapter):
         i_rent = cidx("임대료")
         i_maint = cidx("관리비")
 
+        # 총액 컬럼 여부 판별: 헤더에 총액 키워드 포함 시 해당 컬럼은 평당이 아니라 총액.
+        # 예: '총월임대료', '층별월임대료' 등.
+        # 추가 규칙: 표 내 임의 컬럼이 총액 헤더이면 → 같은 표의 보증금도 총액 가능성 높음.
+        # KB우준타워 패턴: 헤더가 ['층수','임대면적','입주가능시기','보증금','층별월임대료','층별월관리비']
+        # → '층별월임대료' 있으므로 rent_is_total_col=True, 그리고 같은 표이므로 dep도 총액.
+        any_total_col_in_table = any(
+            self._is_total_amount_header(h) for h in header
+        )
+        dep_is_total_col = (
+            i_dep is not None
+            and i_dep < len(header)
+            and (
+                self._is_total_amount_header(header[i_dep])
+                # 보증금 컬럼 자체는 평당 헤더('보증금')이어도 같은 표에 총액 컬럼이 있으면 총액
+                or any_total_col_in_table
+            )
+        )
+        rent_is_total_col = (
+            i_rent is not None
+            and i_rent < len(header)
+            and self._is_total_amount_header(header[i_rent])
+        )
+
+        # 합계/통임대/계/소계/Total 행: 건물 전체 총액으로 평당 신뢰 불가
+        _SCOPE_TOTAL_LABELS = frozenset(["계", "Total", "합계", "소계", "통임대"])
+
         for row in rows[1:]:
             cells = [_clean(c) for c in row]
             if not any(cells):
@@ -216,6 +277,8 @@ class CnWTableAdapter(ExtractorAdapter):
             if not label or "참조" in label:  # '다음페이지참조' skip
                 continue
             is_total = label in ("계", "Total", "합계", "소계")
+            # scope_label이 합계류인 행은 평당 단가로 신뢰 불가
+            is_scope_total = label in _SCOPE_TOTAL_LABELS
 
             fa = FloorAvailability(floor_label=label, is_total_row=is_total)
             if not is_total:
@@ -238,15 +301,41 @@ class CnWTableAdapter(ExtractorAdapter):
             # 같은 행에 임대조건이 있으면 RentTerm으로
             if any(idx is not None for idx in (i_dep, i_rent, i_maint)):
                 rt = RentTerm(scope_label=label)
+
                 if i_dep is not None and i_dep < len(cells):
-                    rt.deposit_per_pyeong = parse_korean_money(cells[i_dep])
-                    rt.terms_raw["deposit"] = cells[i_dep]
+                    raw_val = cells[i_dep]
+                    parsed = parse_korean_money(raw_val)
+                    rt.terms_raw["deposit"] = raw_val
+                    if is_scope_total:
+                        # 합계 행: 총액이므로 평당 단가 NULL
+                        rt.deposit_per_pyeong = None
+                        rt.terms_raw["deposit_note"] = "합계행_총액_평당제외"
+                    elif dep_is_total_col:
+                        # 총보증금 컬럼: 면적으로 나눠 평당 환산
+                        rt.deposit_per_pyeong = self._total_to_per_pyeong(parsed, fa.lease_area_pyeong)
+                        rt.terms_raw["deposit_total_raw"] = raw_val
+                    else:
+                        rt.deposit_per_pyeong = parsed
+
                 if i_rent is not None and i_rent < len(cells):
-                    rt.rent_per_pyeong = parse_korean_money(cells[i_rent])
-                    rt.terms_raw["rent"] = cells[i_rent]
+                    raw_val = cells[i_rent]
+                    parsed = parse_korean_money(raw_val)
+                    rt.terms_raw["rent"] = raw_val
+                    if is_scope_total:
+                        # 합계 행: 총액이므로 평당 단가 NULL
+                        rt.rent_per_pyeong = None
+                        rt.terms_raw["rent_note"] = "합계행_총액_평당제외"
+                    elif rent_is_total_col:
+                        # 총월임대료/총임대료 컬럼: 면적으로 나눠 평당 환산
+                        rt.rent_per_pyeong = self._total_to_per_pyeong(parsed, fa.lease_area_pyeong)
+                        rt.terms_raw["rent_total_raw"] = raw_val
+                    else:
+                        rt.rent_per_pyeong = parsed
+
                 if i_maint is not None and i_maint < len(cells):
                     rt.maintenance_per_pyeong = parse_korean_money(cells[i_maint])
                     rt.terms_raw["maintenance"] = cells[i_maint]
+
                 if any(v is not None for v in (rt.deposit_per_pyeong, rt.rent_per_pyeong, rt.maintenance_per_pyeong)) \
                         or any(rt.terms_raw.values()):
                     b.rents.append(rt)

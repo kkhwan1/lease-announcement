@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Optional
 
 from app.adapters.base import ExtractorAdapter
@@ -81,6 +82,21 @@ class OscarTableAdapter(ExtractorAdapter):
             extraction_method="rule_table",
         )
 
+        # 임대조건 단위 판별: 페이지 텍스트에 '단위: 원/ 3.3㎡' 또는 '단위: 원, 총액' 표기.
+        # - '원/3.3㎡' / '원/평': 평당 단가 (정상)
+        # - '원, 총액' / '원/ 총액': 총액 → 임대면적으로 나눠 평당 환산 필요
+        rent_is_total_amount = False
+        for idx in page_group.page_indices:
+            page_text = doc[idx].get_text()
+            # '(단위: 원/ 3.3㎡)' 패턴 우선 확인
+            if re.search(r"단위[:\s]*원\s*/\s*(?:3\.3㎡|평)", page_text):
+                rent_is_total_amount = False
+                break
+            # '(단위: 원, 총액)' 또는 '(단위: 원/ 총액)' 패턴
+            if re.search(r"단위[:\s]*원[\s,/]+총액", page_text):
+                rent_is_total_amount = True
+                break
+
         # 그룹의 모든 페이지에서 표를 수집 (사진 페이지엔 표 없음 → 자연 skip)
         for idx in page_group.page_indices:
             page = doc[idx]
@@ -98,7 +114,7 @@ class OscarTableAdapter(ExtractorAdapter):
                 elif kind == "floor":
                     self._parse_floor_table(rows, building)
                 elif kind == "rent":
-                    self._parse_rent_table(rows, building)
+                    self._parse_rent_table(rows, building, is_total_amount=rent_is_total_amount)
 
         self._finalize(building)
         return building
@@ -155,8 +171,9 @@ class OscarTableAdapter(ExtractorAdapter):
         if (v := get("E/V", "EV", "엘리베이터")):
             b.ev_count = _to_int(v)
         if (v := get("준공일", "준공", "준공연도", "준공년도")):
+            from app.normalize import parse_completed_year
             b.completed_raw = v
-            b.completed_year = _to_int(v)
+            b.completed_year = parse_completed_year(v)
         if (v := get("천정고", "층고")):
             import re
             m = re.search(r"(\d+(?:\.\d+)?)", v)
@@ -247,7 +264,19 @@ class OscarTableAdapter(ExtractorAdapter):
     # ------------------------------------------------------------------
     # 표2: 임대조건 (헤더 + 데이터행, 보증금/임대료/관리비)
     # ------------------------------------------------------------------
-    def _parse_rent_table(self, rows: list[list], b: BuildingExtraction) -> None:
+    def _parse_rent_table(
+        self,
+        rows: list[list],
+        b: BuildingExtraction,
+        is_total_amount: bool = False,
+    ) -> None:
+        """임대조건 표 파싱.
+
+        is_total_amount=True: 페이지에 '(단위: 원, 총액)' 표기가 있는 경우.
+            보증금·임대료·관리비 값이 평당 단가가 아니라 해당 층 전체 총액이다.
+            같은 scope_label에 대응하는 층별 임대면적(평)으로 나눠 평당 단가로 환산.
+        합계/통임대/계/소계/Total 행은 단위 무관하게 평당 신뢰 불가.
+        """
         if len(rows) < 2:
             return
         header = [_clean(c) for c in rows[0]]
@@ -265,6 +294,31 @@ class OscarTableAdapter(ExtractorAdapter):
         i_rent = cidx("임대료")
         i_maint = cidx("관리비")
 
+        # 합계/통임대/계/소계/Total 행은 건물 전체 총액 → 평당 단가로 신뢰 불가
+        _SCOPE_TOTAL_LABELS = frozenset(["계", "Total", "합계", "소계", "통임대"])
+
+        # 총액 환산용: scope_label → 임대면적(평) 매핑
+        # (층별 공실표와 같은 scope 비교 — '기준층'은 floor_label '@기준층' 등과 다를 수 있어
+        #  숫자 매칭보다 문자열 포함 여부로 느슨하게 매핑)
+        floor_area: dict[str, float] = {}
+        if is_total_amount:
+            for fa in b.floors:
+                if fa.lease_area_pyeong and fa.floor_label:
+                    floor_area[fa.floor_label] = fa.lease_area_pyeong
+
+        def _scope_area(scope: Optional[str]) -> Optional[float]:
+            """scope_label과 가장 잘 매칭되는 층별 임대면적(평) 반환."""
+            if not scope or not floor_area:
+                return None
+            # 정확 매칭 우선
+            if scope in floor_area:
+                return floor_area[scope]
+            # '기준층' → '@기준층' 같은 '@' 접두 케이스
+            for label, area in floor_area.items():
+                if scope in label or label in scope:
+                    return area
+            return None
+
         for row in rows[1:]:
             cells = [_clean(c) for c in row]
             if not any(cells):
@@ -272,15 +326,51 @@ class OscarTableAdapter(ExtractorAdapter):
             rt = RentTerm()
             if i_scope is not None and i_scope < len(cells):
                 rt.scope_label = cells[i_scope] or None
+
+            # 합계류 행: 총액이라 평당 단가 신뢰 불가 → terms_raw만 보존, 평당은 NULL
+            is_scope_total = rt.scope_label in _SCOPE_TOTAL_LABELS
+
             if i_deposit is not None and i_deposit < len(cells):
-                rt.deposit_per_pyeong = parse_korean_money(cells[i_deposit])
-                rt.terms_raw["deposit"] = cells[i_deposit]
+                raw_dep = cells[i_deposit]
+                rt.terms_raw["deposit"] = raw_dep
+                if is_scope_total:
+                    rt.terms_raw["deposit_note"] = "합계행_총액_평당제외"
+                elif is_total_amount:
+                    # 총액 → 면적 환산
+                    parsed = parse_korean_money(raw_dep)
+                    area = _scope_area(rt.scope_label)
+                    rt.deposit_per_pyeong = round(parsed / area, 2) if (parsed and area) else None
+                    rt.terms_raw["deposit_total_raw"] = raw_dep
+                    rt.terms_raw["deposit_note"] = "총액환산"
+                else:
+                    rt.deposit_per_pyeong = parse_korean_money(raw_dep)
+
             if i_rent is not None and i_rent < len(cells):
-                rt.rent_per_pyeong = parse_korean_money(cells[i_rent])
-                rt.terms_raw["rent"] = cells[i_rent]
+                raw_rent = cells[i_rent]
+                rt.terms_raw["rent"] = raw_rent
+                if is_scope_total:
+                    rt.terms_raw["rent_note"] = "합계행_총액_평당제외"
+                elif is_total_amount:
+                    parsed = parse_korean_money(raw_rent)
+                    area = _scope_area(rt.scope_label)
+                    rt.rent_per_pyeong = round(parsed / area, 2) if (parsed and area) else None
+                    rt.terms_raw["rent_total_raw"] = raw_rent
+                    rt.terms_raw["rent_note"] = "총액환산"
+                else:
+                    rt.rent_per_pyeong = parse_korean_money(raw_rent)
+
             if i_maint is not None and i_maint < len(cells):
-                rt.maintenance_per_pyeong = parse_korean_money(cells[i_maint])
-                rt.terms_raw["maintenance"] = cells[i_maint]
+                raw_maint = cells[i_maint]
+                rt.terms_raw["maintenance"] = raw_maint
+                if is_scope_total:
+                    rt.terms_raw["maint_note"] = "합계행_총액_평당제외"
+                elif is_total_amount:
+                    parsed = parse_korean_money(raw_maint)
+                    area = _scope_area(rt.scope_label)
+                    rt.maintenance_per_pyeong = round(parsed / area, 2) if (parsed and area) else None
+                else:
+                    rt.maintenance_per_pyeong = parse_korean_money(raw_maint)
+
             b.rents.append(rt)
 
     # ------------------------------------------------------------------

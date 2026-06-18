@@ -144,8 +144,9 @@ class S1OverviewAdapter(ExtractorAdapter):
             b.scale_raw = v
             b.floors_above, b.floors_below = parse_scale(v)
         if (v := get("준공연도", "준공년도")):
+            from app.normalize import parse_completed_year
             b.completed_raw = v
-            b.completed_year = _to_int(v)
+            b.completed_year = parse_completed_year(v)
         if (v := get("전용율", "전용률")):
             n = re.search(r"([\d.]+)", v)
             if n:
@@ -212,7 +213,23 @@ class S1OverviewAdapter(ExtractorAdapter):
 
     # ------------------------------------------------------------------
     def _parse_rent(self, lines: list[str], b: BuildingExtraction) -> None:
-        """RENT: '단위: 원/3.3㎡' 다음 '층/보증금/임대료/관리비' 헤더, 이후 4개씩."""
+        """RENT: '층/보증금/임대료/관리비' 헤더, 이후 4개씩.
+
+        단위 판별:
+        - '단위: 원/3.3㎡' → 평당 단가 (정상)
+        - '단위: 원'        → 총액 (평당 아님). 임대면적으로 나눠 평당 환산 시도.
+        합계/통임대/계/소계/Total 행은 평당 단가로 신뢰 불가.
+        parse_korean_money가 S1 셀 병합 아티팩트('8,528,000빌' 등)를 이미 제거함.
+        """
+        # '단위: 원' 이면 총액 형식 (예: 대교타워). '단위: 원/3.3㎡'이면 평당.
+        # lines에서 '단위:' 줄을 찾아 판별
+        unit_line = next(
+            (ln for ln in lines if ln.startswith("단위:")),
+            "단위: 원/3.3㎡",  # 기본값: 평당
+        )
+        # '원/3.3㎡' 또는 '원/평' 포함하면 평당, 아니면 총액
+        is_total_unit = not any(kw in unit_line for kw in ("3.3㎡", "/평", "원/평"))
+
         try:
             h_start = next(
                 i for i, ln in enumerate(lines)
@@ -220,16 +237,86 @@ class S1OverviewAdapter(ExtractorAdapter):
             )
         except StopIteration:
             return
+
+        # 합계/통임대/계/소계/Total 행: 평당 단가로 신뢰 불가
+        _SCOPE_TOTAL_LABELS = frozenset(["계", "Total", "합계", "소계", "통임대"])
+
+        # 총액 형식일 때 면적 환산에 사용할 층별 임대면적 매핑 {floor_label: pyeong}
+        floor_area: dict[str, float] = {}
+        if is_total_unit:
+            for fa in b.floors:
+                if fa.lease_area_pyeong and fa.floor_label:
+                    floor_area[fa.floor_label] = fa.lease_area_pyeong
+
         data = lines[h_start + 4:]
         for i in range(0, len(data) - 3, 4):
             label, dep, rent, maint = data[i], data[i + 1], data[i + 2], data[i + 3]
             if not label or label in _SECTIONS:
                 break
             rt = RentTerm(scope_label=label)
-            rt.deposit_per_pyeong = parse_korean_money(dep)
-            rt.rent_per_pyeong = parse_korean_money(rent)
-            rt.maintenance_per_pyeong = parse_korean_money(maint)
             rt.terms_raw = {"deposit": dep, "rent": rent, "maintenance": maint}
+
+            is_scope_total = label in _SCOPE_TOTAL_LABELS
+            if is_scope_total:
+                # 합계 행: 총액이라 평당 단가 신뢰 불가 → None 유지, note만 기록
+                rt.terms_raw["scope_note"] = "합계행_총액_평당제외"
+            elif is_total_unit:
+                # 총액 단위(예: 대교타워): 임대면적으로 나눠 평당 환산
+                area = floor_area.get(label)
+                dep_total = parse_korean_money(dep)
+                rent_total = parse_korean_money(rent)
+                maint_total = parse_korean_money(maint)
+                rt.terms_raw["unit_note"] = "총액단위_면적환산"
+                if area:
+                    rt.deposit_per_pyeong = round(dep_total / area, 2) if dep_total else None
+                    rt.rent_per_pyeong = round(rent_total / area, 2) if rent_total else None
+                    rt.maintenance_per_pyeong = round(maint_total / area, 2) if maint_total else None
+                # 면적 정보 없으면 평당 None (이상치 방지)
+            else:
+                dep_val = parse_korean_money(dep)
+                rent_val = parse_korean_money(rent)
+                maint_val = parse_korean_money(maint)
+
+                # 폴백 휴리스틱: 단위 표기가 '원/3.3㎡'(평당)이어도
+                # 임대료 > 5,000,000 또는 보증금 > 5억이면 총액으로 의심.
+                # 해당 층 임대면적으로 나눠 정상 범위(임대료 5~50만/평)인지 재확인.
+                # 환산 결과가 정상 범위면 총액으로 처리, 아니면 원본 값 그대로.
+                _RENT_ANOMALY_THRESHOLD = 5_000_000   # 평당 임대료 이상치 기준
+                _DEP_ANOMALY_THRESHOLD = 500_000_000  # 평당 보증금 이상치 기준
+                _RENT_NORMAL_MAX = 2_000_000           # 환산 후 정상 최대값 (200만/평)
+
+                is_anomaly = (
+                    (rent_val is not None and rent_val > _RENT_ANOMALY_THRESHOLD)
+                    or (dep_val is not None and dep_val > _DEP_ANOMALY_THRESHOLD)
+                )
+                if is_anomaly:
+                    # 면적 환산 시도 — 층 label로 면적 매핑
+                    area = floor_area.get(label)
+                    if not area:
+                        # floor_area가 비어있으면(is_total_unit=False 경로) 직접 조회
+                        for fa in b.floors:
+                            if fa.lease_area_pyeong and fa.floor_label == label:
+                                area = fa.lease_area_pyeong
+                                break
+                    if area and rent_val:
+                        converted_rent = rent_val / area
+                        if converted_rent <= _RENT_NORMAL_MAX:
+                            # 환산 결과가 정상 → 총액이었음
+                            rt.deposit_per_pyeong = round(dep_val / area, 2) if dep_val else None
+                            rt.rent_per_pyeong = round(converted_rent, 2)
+                            rt.maintenance_per_pyeong = round(maint_val / area, 2) if maint_val else None
+                            rt.terms_raw["unit_note"] = "단위표기오류_총액환산"
+                        else:
+                            # 환산해도 이상치 → None 처리 (적재 안 함)
+                            rt.terms_raw["unit_note"] = "이상치_환산불가"
+                    else:
+                        # 면적 없으면 이상치 → None
+                        rt.terms_raw["unit_note"] = "이상치_면적없음"
+                else:
+                    rt.deposit_per_pyeong = dep_val
+                    rt.rent_per_pyeong = rent_val
+                    rt.maintenance_per_pyeong = maint_val
+
             b.rents.append(rt)
 
     # ------------------------------------------------------------------

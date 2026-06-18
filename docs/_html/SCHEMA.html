@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>임대 매물 데이터베이스 — 스키마 설계 문서</title>
+<style>
+:root{--bg:#0f1115;--panel:#161922;--fg:#e6e9ef;--muted:#9aa3b2;--accent:#6ea8fe;--accent2:#7ee3c7;--border:#262b36;--code:#1b1f29;--th:#1d2230}
+@media(prefers-color-scheme:light){:root{--bg:#f7f8fa;--panel:#fff;--fg:#1b2330;--muted:#5b6573;--accent:#2f6fed;--accent2:#0e9f6e;--border:#e3e7ee;--code:#f0f2f6;--th:#eef1f6}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Segoe UI",Roboto,sans-serif;line-height:1.7;font-size:16px}
+.layout{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--border);padding:24px 18px}
+nav.toc .brand{font-weight:800;font-size:15px;letter-spacing:.02em;color:var(--accent);margin-bottom:4px}
+nav.toc .sub{font-size:12px;color:var(--muted);margin-bottom:18px}
+nav.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 8px;border-radius:6px;font-size:13.5px;border-left:2px solid transparent}
+nav.toc a:hover{color:var(--fg);background:rgba(110,168,254,.08)}
+nav.toc a.lvl2{padding-left:18px}
+nav.toc a.lvl3{padding-left:30px;font-size:12.5px}
+nav.toc a.doc{font-weight:700;color:var(--fg);margin-top:14px}
+main{padding:48px 56px;max-width:920px;margin:0 auto;width:100%;overflow-x:hidden}
+main h1{font-size:30px;font-weight:800;margin:.2em 0 .6em;line-height:1.25}
+main h2{font-size:22px;font-weight:750;margin:1.8em 0 .5em;padding-bottom:.3em;border-bottom:1px solid var(--border)}
+main h3{font-size:18px;font-weight:700;margin:1.4em 0 .4em}
+main h4{font-size:15.5px;font-weight:700;color:var(--muted);margin:1.2em 0 .3em}
+main p{margin:.7em 0}
+a{color:var(--accent)}
+code{background:var(--code);padding:.12em .4em;border-radius:5px;font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.88em}
+pre.code{background:var(--code);border:1px solid var(--border);border-radius:10px;padding:16px 18px;overflow:auto;font-size:13px;line-height:1.55}
+pre.code code{background:none;padding:0}
+blockquote{margin:1em 0;padding:.6em 1.1em;border-left:3px solid var(--accent);background:rgba(110,168,254,.07);border-radius:0 8px 8px 0;color:var(--fg)}
+ul,ol{padding-left:1.4em;margin:.6em 0}
+li{margin:.25em 0}
+li.task{list-style:none;margin-left:-1.2em}
+li.task input{margin-right:.5em}
+hr{border:none;border-top:1px solid var(--border);margin:2em 0}
+.table-wrap{overflow-x:auto;margin:1em 0;border:1px solid var(--border);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:9px 13px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+th{background:var(--th);font-weight:700;white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:rgba(110,168,254,.05)}
+img{max-width:100%;border-radius:8px}
+.doc-section{padding-top:8px}
+.doc-section+.doc-section{margin-top:24px;border-top:2px dashed var(--border);padding-top:32px}
+.meta-foot{margin-top:64px;padding-top:20px;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+.idx-card{display:block;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin:10px 0;text-decoration:none;color:var(--fg);transition:.15s}
+.idx-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.idx-card .t{font-weight:700;font-size:15px}
+.idx-card .p{color:var(--muted);font-size:13px;margin-top:3px}
+.idx-group{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin:24px 0 6px}
+@media(max-width:860px){.layout{grid-template-columns:1fr}nav.toc{position:static;height:auto;border-right:none;border-bottom:1px solid var(--border)}main{padding:28px 20px}}
+</style>
+</head><body>
+<div class="layout">
+<nav class="toc"><div class="brand">임대 매물 데이터베이스 — 스키마 설계 문서</div><div class="sub">SCHEMA.md</div><a class="lvl1" href="#임대-매물-데이터베이스-스키마-설계-문서">임대 매물 데이터베이스 — 스키마 설계 문서</a><a class="lvl2" href="#1-설계-철학-왜-이렇게-짰는가">1. 설계 철학 (왜 이렇게 짰는가)</a><a class="lvl2" href="#2-현재-테이블-구조-12개-뷰-1개">2. 현재 테이블 구조 (12개 + 뷰 1개)</a><a class="lvl3" href="#데이터-흐름">데이터 흐름</a><a class="lvl3" href="#계층별-역할">계층별 역할</a><a class="lvl3" href="#buildings-주요-컬럼">buildings 주요 컬럼</a><a class="lvl2" href="#3-마이그레이션-현황-정리-필요">3. 마이그레이션 현황 ⚠️ (정리 필요)</a><a class="lvl2" href="#4-발견된-데이터-정확도-오류-수정-진행-중">4. 발견된 데이터 정확도 오류 (수정 진행 중)</a><a class="lvl2" href="#5-확장성-로드맵-영업-도구-웹-화면-대비">5. 확장성 로드맵 — 영업 도구 + 웹 화면 대비</a><a class="lvl3" href="#우선순위별-추가-테이블">우선순위별 추가 테이블</a><a class="lvl3" href="#웹-화면용-추가-뷰-제안">웹 화면용 추가 뷰 (제안)</a><a class="lvl3" href="#데이터-모델-개선-후보">데이터 모델 개선 후보</a><a class="lvl2" href="#6-다음-단계-권장-순서">6. 다음 단계 권장 순서</a></nav>
+<main><h1 id="임대-매물-데이터베이스-스키마-설계-문서">임대 매물 데이터베이스 — 스키마 설계 문서</h1>
+<blockquote>최종 갱신: 2026-06-18 · Supabase 프로젝트 <code>tdmfbxwszxzhyywntbks</code> (ap-northeast-1) 현재 적재: 건물 260개 · 층별공실 1,116행 · 출처 병합(PDF+건축물대장) 작동</blockquote>
+<hr>
+<h2 id="1-설계-철학-왜-이렇게-짰는가">1. 설계 철학 (왜 이렇게 짰는가)</h2>
+<p>이 DB의 핵심 난제는 <strong>&quot;같은 건물이 여러 중개사 안내문에 제각각 표기로 중복 등장&quot;</strong>한다는 것이다. 이를 해결하기 위한 4가지 축:</p>
+<div class="table-wrap"><table><thead><tr><th>축</th><th>구현</th><th>목적</th></tr></thead><tbody><tr><td><strong>건물 마스터 단일화</strong></td><td><code>buildings</code> + <code>match_key</code>(주소 우선)</td><td>같은 건물은 1행. 중개사 표기 차이를 주소로 흡수</td></tr><tr><td><strong>마스터 ↔ 스냅샷 분리</strong></td><td><code>buildings</code>(불변 물리스펙) vs <code>listing_snapshots</code>(중개사×월 거래현황)</td><td>건물 스펙과 매월 바뀌는 공실/임대료를 분리</td></tr><tr><td><strong>필드 단위 출처 병합</strong></td><td><code>building_field_values</code> (필드×출처)</td><td>&quot;PDF로 채우고 부족분은 다른 PDF/API로&quot; — 출처별 추적</td></tr><tr><td><strong>raw 원본 보존</strong></td><td><code>raw_extractions</code> (immutable)</td><td>파서 개선 시 PDF 재파싱 없이 재처리</td></tr></tbody></table></div>
+<p><strong>Entity Resolution 키 전략 (사용자 결정):</strong> 주소가 1차 키. 건물명은 표기가 불안정하므로 보조 키. <code>match_key = &quot;addr:&quot; + 도로명+건물번호</code> (예: <code>addr:강남대로374</code>), 주소 없으면 <code>name:</code> 네임스페이스.</p>
+<hr>
+<h2 id="2-현재-테이블-구조-12개-뷰-1개">2. 현재 테이블 구조 (12개 + 뷰 1개)</h2>
+<h3 id="데이터-흐름">데이터 흐름</h3>
+<pre class="code"><code>PDF → source_documents (1 PDF=1행, sha256 멱등)
+    → raw_extractions     (가공 전 원본, immutable)
+    → buildings           (마스터, match_key로 중복 해소)
+        ├ building_field_values  (필드×출처 병합: pdf_parse / building_register)
+        ├ building_aliases       (중개사별 호칭 차이)
+        └ listing_snapshots      (건물×중개사×월, is_latest 1건)
+              ├ floor_availabilities (층별 공실 1:N)
+              └ rent_terms           (임대조건, 평당+㎡ generated)
+    → building_images     (Storage 경로 + 분류)
+    → merge_candidates / review_queue  (수동 병합·검수 큐)</code></pre>
+<h3 id="계층별-역할">계층별 역할</h3>
+<ul><li><strong>마스터</strong>: <code>brokers</code>(중개사 4), <code>buildings</code>(건물, +건축물대장 8필드)</li><li><strong>원본보존</strong>: <code>source_documents</code>, <code>raw_extractions</code>, <code>building_field_values</code></li><li><strong>거래현황</strong>: <code>listing_snapshots</code>, <code>floor_availabilities</code>, <code>rent_terms</code></li><li><strong>보조</strong>: <code>building_aliases</code>, <code>building_images</code>, <code>merge_candidates</code>, <code>review_queue</code></li><li><strong>뷰</strong>: <code>v_current_vacancies</code> (최신 공실 검색용 평탄화)</li></ul>
+<h3 id="buildings-주요-컬럼">buildings 주요 컬럼</h3>
+<ul><li>식별: <code>match_key</code>(uniq), <code>identity_key</code>(generated 보조), <code>name</code>, <code>name_raw</code></li><li>위치: <code>address_road</code>, <code>address_raw</code>, <code>district</code>(GBD/CBD/YBD/BBD/ETC enum), <code>station_area</code>, <code>latitude</code>/<code>longitude</code></li><li>물리스펙(PDF): <code>floors_above/below</code>, <code>gross_area_sqm/pyeong</code>, <code>ev_count</code>, <code>completed_year</code>, <code>ceiling_height_m</code>, <code>efficiency_ratio</code>, <code>parking_total</code>, <code>features_raw</code></li><li>건축물대장(API 보강): <code>main_purpose</code>, <code>building_coverage_ratio</code>, <code>floor_area_ratio</code>, <code>height_m</code>, <code>land_area_sqm</code>, <code>use_zone</code></li></ul>
+<hr>
+<h2 id="3-마이그레이션-현황-정리-필요">3. 마이그레이션 현황 ⚠️ (정리 필요)</h2>
+<div class="table-wrap"><table><thead><tr><th>파일</th><th>상태</th></tr></thead><tbody><tr><td>0001~0012, 0019</td><td>✅ 파일 있음</td></tr><tr><td><strong>0013~0018</strong></td><td>⚠️ <strong>파일 없음, DB엔 적용됨</strong> (MCP 직접 적용)</td></tr></tbody></table></div>
+<p><strong>누락된 0013~0018 실제 내용</strong> (이 문서에 기록):</p>
+<ul><li><strong>0013</strong>: RLS 정책 (모든 테이블, authenticated 전체 허용) + Storage 버킷 정책</li><li><strong>0014/0015</strong>: 멱등 UNIQUE 제약 (raw<em>extractions, building</em>field<em>values, listing</em>snapshots, building<em>aliases, merge</em>candidates)</li><li><strong>0016</strong>: <code>immutable_unaccent</code> search_path 수정 (public 추가)</li><li><strong>0017</strong>: numeric precision 12→18 확대 (금액·면적) + 뷰 재생성</li><li><strong>0018</strong>: <code>buildings.match_key</code> 컬럼 + 부분 UNIQUE 인덱스, identity_key UNIQUE 제거</li></ul>
+<blockquote><strong>조치 필요</strong>: 위 내용을 <code>supabase/migrations/0013~0018_*.sql</code> 파일로 역생성해 버전관리에 등록. 안 하면 신규 환경에서 DB 재현 불가 / 협업·CI 파손.</blockquote>
+<hr>
+<h2 id="4-발견된-데이터-정확도-오류-수정-진행-중">4. 발견된 데이터 정확도 오류 (수정 진행 중)</h2>
+<div class="table-wrap"><table><thead><tr><th>오류</th><th>원인</th><th>상태</th></tr></thead><tbody><tr><td>임대료 평당 1000만↑ 67건</td><td>&quot;총월임대료&quot;(총액)를 평당 컬럼에 넣음</td><td>🔧 어댑터에 총액→평당 환산 추가</td></tr><tr><td>보증금 평당 1억↑ 33건</td><td>&quot;합계/통임대&quot; 행(총액)을 평당으로</td><td>🔧 동일</td></tr><tr><td>&quot;빌&quot; 노이즈 39건</td><td>S1 셀 병합 아티팩트</td><td>✅ 금액 파서 수정</td></tr><tr><td>준공년도 &quot;2&quot;</td><td>천정고(&quot;2.6m&quot;)가 준공 셀에 혼입</td><td>🔧 4자리 연도 우선 파싱</td></tr><tr><td>건물명에 주소 잔류</td><td>C&amp;W 주소 분리 실패(공백없는 주소)</td><td>🔧 정규식 보강</td></tr><tr><td>병합 후보 10건</td><td>이름 유사+주소 다른 별개 건물</td><td>✅ 전수 검토 → 모두 rejected(정상)</td></tr></tbody></table></div>
+<p><strong>데이터 충실도(양호):</strong> PDF 필드 98~100%, 건축물대장 API 27~32%(주소 조회 성공분).</p>
+<hr>
+<h2 id="5-확장성-로드맵-영업-도구-웹-화면-대비">5. 확장성 로드맵 — 영업 도구 + 웹 화면 대비</h2>
+<p>현재는 &quot;PDF→DB 적재&quot;까지 완성. 향후 <strong>영업 도구 + 웹</strong>을 위해 필요한 추가 설계:</p>
+<h3 id="우선순위별-추가-테이블">우선순위별 추가 테이블</h3>
+<div class="table-wrap"><table><thead><tr><th>순위</th><th>영역</th><th>추가 테이블</th><th>목적</th></tr></thead><tbody><tr><td><strong>1</strong></td><td>사용자/권한</td><td><code>users</code>(role: admin/agent/viewer), RLS 세분화</td><td>멀티유저 협업, 내 데이터 격리</td></tr><tr><td><strong>1</strong></td><td>CRM/영업</td><td><code>clients</code>, <code>client_requirements</code>, <code>proposals</code>, <code>proposal_notes</code></td><td>고객 요구사항 저장 → 매물 자동 매칭 → 제안 이력</td></tr><tr><td><strong>2</strong></td><td>매물 상태</td><td><code>floor_availabilities.listing_status</code>(available/negotiating/leased/withdrawn) + 이력</td><td>&quot;계약중/성약&quot; 추적, 검색 제외</td></tr><tr><td><strong>2</strong></td><td>지도</td><td><code>buildings.location_geom</code>(PostGIS) + GIST 인덱스</td><td>네이버지도식 핀·반경검색 (위경도는 이미 보강됨)</td></tr><tr><td><strong>3</strong></td><td>영업 UX</td><td><code>building_bookmarks</code>, <code>building_notes</code>, <code>tags</code>, <code>building_tags</code></td><td>즐겨찾기·메모·태그 분류</td></tr><tr><td><strong>3</strong></td><td>감사</td><td><code>audit_log</code> + 트리거</td><td>변경 이력 추적</td></tr><tr><td><strong>4</strong></td><td>첨부</td><td><code>building_attachments</code></td><td>PDF 원본·계약서 등</td></tr></tbody></table></div>
+<h3 id="웹-화면용-추가-뷰-제안">웹 화면용 추가 뷰 (제안)</h3>
+<ul><li><code>v_buildings_summary</code>: 건물별 공실수·최저임대료 집계 (리스트/카드 뷰)</li><li><code>v_buildings_map</code>: 좌표 + 최소정보 (지도 핀)</li><li><code>v_listing_status_summary</code>: 거래현황 대시보드</li><li><code>v_client_matching_results</code>: 고객조건 vs 공실 매칭</li></ul>
+<h3 id="데이터-모델-개선-후보">데이터 모델 개선 후보</h3>
+<ul><li><strong><code>rent_terms.scope_label</code> → enum화</strong>: 기준층/통층/특정층/총액 구분 명확화 (현재 '합계/총액' 모호)</li><li><strong><code>building_field_values</code> EAV</strong>: value가 text라 타입별 조회 어려움. 1000건 넘으면 타입별 컬럼 분리 검토.</li></ul>
+<hr>
+<h2 id="6-다음-단계-권장-순서">6. 다음 단계 권장 순서</h2>
+<ol><li><strong>(즉시) 데이터 오류 수정 완료 + 전체 재적재</strong> — 임대료/준공년도/주소 정확도</li><li><strong>(즉시) 마이그레이션 0013~0018 파일 역생성</strong> — 재현성 확보</li><li><strong>(웹 착수 전) 사용자/RLS + CRM 테이블 설계</strong> — 영업 도구 기반</li><li><strong>(웹) Next.js + 지도(PostGIS) + 검색 뷰</strong> — 화면 구축</li></ol>
+<div class="meta-foot">원본: <code>SCHEMA.md</code> · 자동 생성 2026-06-18 · md-to-html</div>
+</main>
+</div>
+
+</body></html>
