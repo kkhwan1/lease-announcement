@@ -87,6 +87,8 @@ export function BuildingOverview({ detail }: BuildingOverviewProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* 건물개요 | 건축물대장 — 좌우 2열 (모바일 1열) */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       {/* 1. 건물 개요 */}
       <SectionCard title="건물 개요">
         <DefinitionRow label="주소" value={address_road} />
@@ -138,8 +140,9 @@ export function BuildingOverview({ detail }: BuildingOverviewProps) {
           <DefinitionRow label="용도지역" value={use_zone} />
         </SectionCard>
       )}
+      </div>
 
-      {/* 3. 건물 특장점 — features_raw 있을 때만 */}
+      {/* 3. 건물 특장점 — 2열 아래 전폭, features_raw 있을 때만 */}
       {features_raw !== null && features_raw.trim() !== "" && (
         <Card variant="flat" as="section">
           <h2 className="mb-3 text-heading-sm text-ink-deep">건물 특장점</h2>

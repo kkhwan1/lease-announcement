@@ -73,9 +73,15 @@ function GalleryImage({ image, hero = false }: { image: BuildingImage; hero?: bo
 }
 
 export function PhotoGallery({ images }: PhotoGalleryProps) {
-  // other 제외 + 우선순위 정렬, 최대 6장.
+  // other 제외 + 위치도(location_map)는 별도 지도로 대체하므로 갤러리에서 제외.
+  // 우선순위 정렬, 최대 6장.
   const visible = images
-    .filter((img) => img.kind !== "other" && img.storage_path)
+    .filter(
+      (img) =>
+        img.kind !== "other" &&
+        img.kind !== "location_map" &&
+        img.storage_path,
+    )
     .sort(
       (a, b) =>
         (KIND_ORDER[a.kind] ?? 99) - (KIND_ORDER[b.kind] ?? 99) ||

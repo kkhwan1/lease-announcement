@@ -10,6 +10,7 @@ import {
 } from "@/lib/queries";
 import { PhotoGallery } from "@/components/PhotoGallery";
 import { BuildingOverview } from "@/components/BuildingOverview";
+import { BuildingLocationMap } from "@/components/BuildingLocationMap";
 import { FloorTable } from "@/components/FloorTable";
 import { RentTrendChart } from "@/components/RentTrendChart";
 import { Button } from "@/components/ui/Button";
@@ -73,6 +74,19 @@ export default async function BuildingDetailPage({
 
       <section className="mb-12">
         <BuildingOverview detail={detail} />
+      </section>
+
+      {/* 위치 — 카카오 지도로 건물 1개 표시 */}
+      <section className="mb-12">
+        <SectionHeading level={3} className="mb-4">위치</SectionHeading>
+        <BuildingLocationMap
+          latitude={detail.latitude}
+          longitude={detail.longitude}
+          name={detail.name}
+        />
+        {detail.address_road && (
+          <p className="mt-3 text-body-sm text-steel">{detail.address_road}</p>
+        )}
       </section>
 
       <section className="mb-12">
