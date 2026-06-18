@@ -74,7 +74,7 @@ export default async function BuildingDetailPage({
           <PhotoGallery images={images} />
         </div>
         <div className="md:col-span-5">
-          <BuildingOverview detail={detail} section="overview" />
+          <BuildingOverview detail={detail} section="info" />
         </div>
       </section>
 
@@ -91,10 +91,12 @@ export default async function BuildingDetailPage({
         )}
       </section>
 
-      {/* 건축물대장 + 특장점 — 전폭 2열 */}
-      <section className="mb-12">
-        <BuildingOverview detail={detail} section="registry" />
-      </section>
+      {/* 건물 특장점 — 전폭 (있을 때만 섹션 렌더, 빈 여백 방지) */}
+      {detail.features_raw && detail.features_raw.trim() !== "" && (
+        <section className="mb-12">
+          <BuildingOverview detail={detail} section="features" />
+        </section>
+      )}
 
       <section className="mb-12">
         <SectionHeading level={3} className="mb-4">층별 공실 현황</SectionHeading>
