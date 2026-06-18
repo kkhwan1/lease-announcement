@@ -15,6 +15,13 @@ import tempfile
 from collections import defaultdict
 from pathlib import Path
 
+# 이 프로젝트 .env를 먼저 로드해 모든 키(DATAGO_SERVICE_KEY·VWORLD_KEY 등)를
+# 자급자족하게 한다. kk_real_estate/.env는 building_register가 보조로 로드하되
+# 이미 세팅된 키는 덮어쓰지 않으므로, 여기서 로드한 이 프로젝트 값이 우선한다.
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
 from app.pipeline import process_pdf
 from app.schemas import BrokerCode, BuildingExtraction, SourceDocument
 
