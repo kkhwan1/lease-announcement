@@ -209,16 +209,24 @@ def cmd_batch(pdf_dir: str, out_dir: str) -> int:
 # push 커맨드: PDF 재파싱 → Supabase 적재 (pipeline + store_document 연동)
 # ---------------------------------------------------------------------------
 
-def cmd_push(pdf_dir: str, out_dir: str) -> int:
+def cmd_push(pdf_dir: str, out_dir: str, enrich: bool = False) -> int:
     """폴더 내 모든 PDF를 파싱해 Supabase에 적재.
 
     흐름:
       1. 폴더 내 PDF 목록 수집
       2. 각 PDF: pipeline.process_pdf → SourceDocument
-      3. supa_store.store_document → Supabase upsert
-      4. 중개사별 적재 통계 출력
+      3. (enrich=True) 각 건물에 건축물대장 API 보강 (빈 필드만 채움)
+      4. supa_store.store_document → Supabase upsert
+      5. 중개사별 적재 통계 출력
     """
     from app.supa_store import store_document
+
+    enrichers = []
+    if enrich:
+        from app.enrich.base import apply_enrichers
+        from app.enrich.building_register import BuildingRegisterEnricher
+        enrichers = [BuildingRegisterEnricher()]
+        print("  [enrich] 건축물대장 API 보강 활성화")
 
     src = Path(pdf_dir)
     if not src.exists():
@@ -260,6 +268,14 @@ def cmd_push(pdf_dir: str, out_dir: str) -> int:
 
         bcode = source_doc.broker.value
         stats[bcode]["files"] += 1
+
+        # 건축물대장 API 보강 (빈 필드만 채움, graceful — 실패해도 적재 진행)
+        if enrichers:
+            for i, bld in enumerate(source_doc.buildings):
+                try:
+                    source_doc.buildings[i] = apply_enrichers(bld, enrichers)
+                except Exception as exc:
+                    print(f"    [보강 실패] {bld.building_name} — {exc}", file=sys.stderr)
 
         try:
             result = store_document(source_doc, source_doc.buildings)
@@ -326,10 +342,12 @@ def main() -> int:
     p_batch.add_argument("dir", help="PDF가 들어있는 폴더 경로")
     p_batch.add_argument("--out", default="out/", help="출력 디렉토리 (기본: out/)")
 
-    # push 커맨드: out/ JSON → Supabase 적재
-    p_push = sub.add_parser("push", help="out/ JSON 파일을 Supabase에 적재")
+    # push 커맨드: PDF 재파싱 → (보강) → Supabase 적재
+    p_push = sub.add_parser("push", help="PDF를 파싱해 Supabase에 적재")
     p_push.add_argument("pdf_dir", help="원본 PDF 폴더 경로 (pipeline 재실행용)")
     p_push.add_argument("--out", default="out/", help="JSON 출력 디렉토리 (기본: out/)")
+    p_push.add_argument("--enrich", action="store_true",
+                        help="건축물대장 API로 빈 필드 보강 후 적재")
 
     args = parser.parse_args()
 
@@ -338,7 +356,7 @@ def main() -> int:
     elif args.cmd == "batch":
         return cmd_batch(args.dir, args.out)
     elif args.cmd == "push":
-        return cmd_push(args.pdf_dir, args.out)
+        return cmd_push(args.pdf_dir, args.out, enrich=args.enrich)
 
     return 0
 

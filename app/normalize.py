@@ -45,7 +45,18 @@ def parse_korean_money(s: str) -> Optional[int | float]:
     - 한자/한글 숫자('일억', '삼천만') 처리
     - 잔여 문자가 남으면 안전하게 None
     """
-    s = s.strip().replace(",", "").replace(" ", "").rstrip("원")
+    s = s.strip().rstrip("원").strip()
+    if not s:
+        return None
+
+    # 공백으로 분리된 여러 숫자 토큰 처리 (C&W 셀 병합: '144,300 44,700').
+    # 토큰이 모두 순수 숫자(콤마 포함)면 → 첫 번째 값만 취한다.
+    # ('1억 4천만'처럼 한글 단위가 섞인 경우는 아래 일반 경로로 진행)
+    tokens = s.split()
+    if len(tokens) > 1 and all(re.fullmatch(r"[\d,]+(?:\.\d+)?", t) for t in tokens):
+        s = tokens[0]
+
+    s = s.replace(",", "").replace(" ", "")
     if not s:
         return None
     # 순수 숫자
