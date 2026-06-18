@@ -17,6 +17,12 @@ export interface BuildingFilter {
   keyword?: string;
 }
 
+/** PostgREST 필터 문자열에서 구조 조작 가능 문자를 제거/치환.
+ *  쉼표·괄호·별표·역슬래시는 .or()/ilike 패턴 문법과 충돌하므로 안전 처리. */
+function sanitizePostgrestTerm(s: string): string {
+  return s.replace(/[,()\\*%]/g, " ").trim();
+}
+
 /** 홈/검색 카드 리스트. 필터 적용. */
 export async function fetchBuildingSummaries(
   filter: BuildingFilter = {},
@@ -27,10 +33,12 @@ export async function fetchBuildingSummaries(
     q = q.eq("district", filter.district);
   }
   if (filter.keyword) {
-    q = q.or(
-      `name.ilike.%${filter.keyword}%,address_road.ilike.%${filter.keyword}%`,
-    );
+    const kw = sanitizePostgrestTerm(filter.keyword);
+    if (kw) {
+      q = q.or(`name.ilike.%${kw}%,address_road.ilike.%${kw}%`);
+    }
   }
+  // 임대료 필터: 범위를 명시한 경우에만 적용(미상 건물은 필터 미적용 시 노출됨).
   if (filter.minRent !== undefined) {
     q = q.gte("min_rent_per_pyeong", filter.minRent);
   }
