@@ -31,3 +31,14 @@ def test_metro_district_not_over_split():
     assert insert_address_spacing("대구광역시수성구달구벌대로2424") == "대구광역시 수성구 달구벌대로2424"
     # '시청로'의 '시'를 구로 오인하면 안 됨 — '서구'만 분리
     assert insert_address_spacing("광주광역시서구시청로30") == "광주광역시 서구 시청로30"
+
+
+def test_metro_with_general_city_district():
+    # 광역도 + 일반시 + 구 (3단계): '수원시 팔달구'까지 분리
+    assert insert_address_spacing("경기도수원시팔달구권광로205") == "경기도 수원시 팔달구 권광로205"
+    assert insert_address_spacing("경기도성남시분당구판교역로235") == "경기도 성남시 분당구 판교역로235"
+
+
+def test_sejong_no_district():
+    # 세종특별자치시는 구가 없음 — 시/도만 띄움
+    assert insert_address_spacing("세종특별자치시한누리대로269") == "세종특별자치시 한누리대로269"

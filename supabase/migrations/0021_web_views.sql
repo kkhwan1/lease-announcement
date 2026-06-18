@@ -20,15 +20,21 @@ select
     fa.min_rent_per_pyeong,
     img.thumbnail_path
 from buildings b
+-- 공실수: floor_availabilities만 집계 (rent_terms와 분리해 곱집합 방지)
 left join lateral (
-    select
-        count(*) filter (where not f.is_total_row)        as vacancy_count,
-        min(rt.rent_per_pyeong) filter (where rt.rent_per_pyeong > 0) as min_rent_per_pyeong
+    select count(*) filter (where not f.is_total_row) as vacancy_count
     from listing_snapshots ls
-    left join floor_availabilities f on f.listing_snapshot_id = ls.id
-    left join rent_terms rt          on rt.listing_snapshot_id = ls.id
+    join floor_availabilities f on f.listing_snapshot_id = ls.id
     where ls.building_id = b.id and ls.is_latest
 ) fa on true
+-- 최저 평당임대료: rent_terms만 집계 (별도 LATERAL — 곱집합 방지)
+left join lateral (
+    select min(rt.rent_per_pyeong) filter (where rt.rent_per_pyeong > 0) as min_rent_per_pyeong
+    from listing_snapshots ls
+    join rent_terms rt on rt.listing_snapshot_id = ls.id
+    where ls.building_id = b.id and ls.is_latest
+) rterm on true
+-- 대표 썸네일: 종류 우선순위 + page_number(NULL last)
 left join lateral (
     select bi.storage_path as thumbnail_path
     from building_images bi
@@ -36,7 +42,7 @@ left join lateral (
     order by case bi.kind
         when 'exterior' then 1 when 'lobby' then 2
         when 'interior' then 3 else 9 end,
-        bi.page_number
+        bi.page_number nulls last
     limit 1
 ) img on true;
 

@@ -336,18 +336,27 @@ def cmd_geocode(limit: int | None = None, dry_run: bool = False) -> int:
     from app.geocode import geocode_address
     from app.supa_store import get_client
 
+    # 쓰기 작업이므로 service_role 키 필수 (anon이면 RLS로 UPDATE가 조용히 실패)
+    if not dry_run and not (
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or os.environ.get("SUPABASE_SERVICE_KEY")
+    ):
+        print("오류: geocode는 쓰기 작업입니다. SUPABASE_SERVICE_ROLE_KEY가 필요합니다.")
+        return 1
+
     client = get_client()
     kakao_key = os.environ.get("KAKAO_REST_API_KEY")
 
+    # latitude 또는 longitude 어느 한쪽이라도 NULL인 행을 보강 대상으로
     q = (
         client.table("buildings")
-        .select("id, name, address_road, address_raw, latitude")
-        .is_("latitude", "null")
+        .select("id, name, address_road, address_raw, latitude, longitude")
+        .or_("latitude.is.null,longitude.is.null")
     )
     if limit:
         q = q.limit(limit)
     rows = q.execute().data or []
-    print(f"좌표 NULL 건물: {len(rows)}건")
+    print(f"좌표 미보유 건물: {len(rows)}건")
 
     ok = fail = 0
     for r in rows:

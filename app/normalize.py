@@ -493,18 +493,29 @@ _SIDO_NAMES = [
 _SIDO_NAMES.sort(key=len, reverse=True)
 _SIDO_PATTERN = "|".join(_SIDO_NAMES)
 
-# 시/도 직후의 구/군. 단, '구/군' 뒤에 도로명 토큰(대로/로/길/동/읍/면/가/숫자)이
-# 이어질 때만 진짜 행정구로 인정 → '달구벌대로'의 '달구'를 구로 오인하지 않음.
+# 도로명 토큰: '구/군/시' 뒤에 이것이 이어질 때만 진짜 행정구역으로 인정
+# → '달구벌대로'의 '달구'를 구로 오인하지 않음.
+_ROAD_TOKEN = r"(?=[가-힣]*(?:대로|로|길|동|읍|면|가|\d))"
+
+# 도(경기도 등) + 일반시(수원시 등) + 구(팔달구). 3단계 행정구역.
+# 일반시는 '광역시/특별시/특별자치시'가 아니어야 함(그건 시/도 명칭) →
+# 시 앞 글자에 '광역/특별/자치'가 붙지 않도록 (?<!광역)(?<!특별) 등으로 차단.
+_DO_SI_GU_RE = re.compile(
+    rf"^({_SIDO_PATTERN})\s*((?:(?!광역|특별|자치)[가-힣]){{1,3}}시)"
+    rf"\s*([가-힣]{{1,3}}(?:구|군)){_ROAD_TOKEN}\s*"
+)
+# 시/도 직후의 구/군 (2단계).
 _SIDO_GU_RE = re.compile(
-    rf"^({_SIDO_PATTERN})\s*([가-힣]{{1,3}}(?:구|군))(?=[가-힣]*(?:대로|로|길|동|읍|면|가|\d))\s*"
+    rf"^({_SIDO_PATTERN})\s*([가-힣]{{1,3}}(?:구|군)){_ROAD_TOKEN}\s*"
 )
 
 
 def insert_address_spacing(address: Optional[str]) -> Optional[str]:
     """C&W식 공백없는 주소에 시·도/구 사이 공백을 삽입.
 
-    '서울특별시종로구율곡로 2길19' → '서울특별시 종로구 율곡로 2길19'
-    '서울시성동구뚝섬로17가길49'   → '서울시 성동구 뚝섬로17가길49'
+    '서울특별시종로구율곡로 2길19'  → '서울특별시 종로구 율곡로 2길19'
+    '서울시성동구뚝섬로17가길49'    → '서울시 성동구 뚝섬로17가길49'
+    '경기도수원시팔달구권광로205'   → '경기도 수원시 팔달구 권광로205'
     이미 공백이 정상이면 그대로 반환. 구 분리가 모호하면 시/도만 띄우고
     나머지는 지오코더의 자체 파싱에 맡긴다.
     """
@@ -516,6 +527,14 @@ def insert_address_spacing(address: Optional[str]) -> Optional[str]:
     if re.match(rf"^({_SIDO_PATTERN})\s", s):
         return s
 
+    # 3단계: 도 + 일반시 + 구
+    m3 = _DO_SI_GU_RE.match(s)
+    if m3:
+        sido, si, gu = m3.group(1), m3.group(2), m3.group(3)
+        rest = s[m3.end():].strip()
+        return f"{sido} {si} {gu} {rest}".strip()
+
+    # 2단계: 시/도 + 구/군
     m = _SIDO_GU_RE.match(s)
     if m:
         sido, gu = m.group(1), m.group(2)

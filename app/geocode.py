@@ -50,7 +50,16 @@ def geocode_kakao(address: str, api_key: str, timeout: float = 5.0) -> Optional[
 
 
 def geocode_vworld(address: str) -> Optional[GeoPoint]:
-    """kk_real_estate V-World geocoder 폴백. 실패 시 None."""
+    """kk_real_estate V-World geocoder 폴백. 실패 시 None.
+
+    geocoder.py가 형제 모듈/패키지 컨텍스트에 의존하므로 sys.path에
+    src 경로를 추가해 import한다. 경로 존재를 먼저 검증한다.
+    """
+    import os.path
+
+    if not os.path.exists(os.path.join(_KK_GEOCODER_SRC, "geocoder.py")):
+        logger.warning("V-World geocoder 모듈 없음: %s", _KK_GEOCODER_SRC)
+        return None
     try:
         if _KK_GEOCODER_SRC not in sys.path:
             sys.path.insert(0, _KK_GEOCODER_SRC)
