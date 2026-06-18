@@ -6,3 +6,5 @@ out/
 worktree/
 Raw/*.pdf
 docs/_html/
+.playwright-mcp/
+phase2-home.png

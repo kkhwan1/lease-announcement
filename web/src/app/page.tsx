@@ -1,11 +1,94 @@
-// 홈(임시) — Phase 2에서 지도+리스트 분할 화면으로 교체.
+"use client";
+
+// 홈 = 지도+리스트 분할 (메인 탐색). 좌: 필터+카드 리스트 / 우: 카카오 지도.
+import { useEffect, useMemo, useState } from "react";
+import FilterBar from "@/components/FilterBar";
+import { BuildingList } from "@/components/BuildingList";
+import KakaoMap from "@/components/KakaoMap";
+import {
+  fetchBuildingSummaries,
+  fetchMapPins,
+  type BuildingFilter,
+} from "@/lib/queries";
+import type { BuildingSummary, BuildingMapPin } from "@/lib/types";
+
 export default function HomePage() {
+  const [filter, setFilter] = useState<BuildingFilter>({});
+  const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
+  const [allPins, setAllPins] = useState<BuildingMapPin[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // 지도 핀: 최초 1회 전체 로드
+  useEffect(() => {
+    fetchMapPins()
+      .then(setAllPins)
+      .catch((e) => console.error("지도 핀 로드 실패:", e));
+  }, []);
+
+  // 카드 리스트: 필터 변경 시 재조회 (디바운스)
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const t = setTimeout(() => {
+      fetchBuildingSummaries(filter)
+        .then((rows) => {
+          if (cancelled) return;
+          setBuildings(rows);
+          setError(null);
+        })
+        .catch((e) => {
+          if (cancelled) return;
+          console.error(e);
+          setError("매물을 불러오지 못했습니다.");
+        })
+        .finally(() => !cancelled && setLoading(false));
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [filter]);
+
+  // 현재 필터 결과에 해당하는 핀만 지도에 표시 (리스트와 동기화)
+  const visiblePins = useMemo(() => {
+    const ids = new Set(buildings.map((b) => b.building_id));
+    return allPins.filter((p) => ids.has(p.building_id));
+  }, [allPins, buildings]);
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-16">
-      <h1 className="text-2xl font-bold">오피스 임대매물 검색</h1>
-      <p className="mt-2 text-muted">
-        Phase 1 셋업 완료. 다음 단계(Phase 2)에서 지도와 매물 목록을 표시합니다.
-      </p>
+    <div className="flex h-[calc(100vh-3.5rem)] flex-col">
+      <div className="border-b border-border bg-background px-4 py-3">
+        <FilterBar value={filter} onChange={setFilter} />
+      </div>
+      <div className="flex flex-1 overflow-hidden">
+        {/* 좌: 리스트 */}
+        <div className="flex w-full flex-col border-r border-border md:w-[440px] lg:w-[520px]">
+          <div className="border-b border-border px-4 py-2 text-sm text-muted">
+            {loading
+              ? "불러오는 중..."
+              : error
+                ? error
+                : `매물 ${buildings.length.toLocaleString()}건`}
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <BuildingList
+              buildings={buildings}
+              selectedId={selectedId}
+              onHover={setSelectedId}
+            />
+          </div>
+        </div>
+        {/* 우: 지도 (모바일에서는 숨김) */}
+        <div className="hidden flex-1 md:block">
+          <KakaoMap
+            pins={visiblePins}
+            selectedId={selectedId}
+            onSelectPin={setSelectedId}
+          />
+        </div>
+      </div>
     </div>
   );
 }
