@@ -15,9 +15,9 @@ interface BuildingOverviewProps {
   detail: BuildingDetail;
 }
 
-/** 라벨:값 한 행. value가 null이거나 "-"이면 렌더하지 않음. */
+/** 라벨:값 한 행. value가 null/빈문자열/"-"이면 렌더하지 않음. */
 function DefinitionRow({ label, value }: { label: string; value: string | null }) {
-  if (value === null || value === "-") return null;
+  if (value === null || value.trim() === "" || value === "-") return null;
   return (
     <div className="flex gap-2 py-1.5 text-sm">
       <dt className="w-24 shrink-0 text-muted">{label}</dt>
@@ -74,14 +74,15 @@ export function BuildingOverview({ detail }: BuildingOverviewProps) {
     return `${sqm} / ${pyeong}`;
   })();
 
-  // 건축물대장 섹션: 값이 하나라도 있을 때만 렌더
+  // 건축물대장 섹션: 값이 하나라도 있을 때만 렌더 (빈 문자열은 값 없음으로 취급)
+  const hasText = (v: string | null) => v !== null && v.trim() !== "";
   const hasBuildingRegistry =
-    main_purpose !== null ||
+    hasText(main_purpose) ||
     toNum(building_coverage_ratio) !== null ||
     toNum(floor_area_ratio) !== null ||
     toNum(height_m) !== null ||
     toNum(land_area_sqm) !== null ||
-    use_zone !== null;
+    hasText(use_zone);
 
   return (
     <div className="flex flex-col gap-4">

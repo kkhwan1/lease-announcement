@@ -85,16 +85,13 @@ export function RentTrendChart({ data }: RentTrendChartProps) {
     );
   }
 
-  // 고유 snapshot_month 집합
-  const uniqueMonths = new Set(data.map((d) => toYearMonth(d.snapshot_month)));
+  // 월별 집계를 먼저 수행 — 안내/차트 분기를 "유효 임대료가 있는 월 수" 기준으로 통일.
+  const chartData = aggregateByMonth(data);
 
-  // 고유 월 1개 이하 — 안내 카드
-  if (uniqueMonths.size <= 1) {
-    const monthLabel = uniqueMonths.size === 1 ? Array.from(uniqueMonths)[0] : null;
-
-    // 현재 평균 평당임대료 계산
-    const rents = data.map((d) => toNum(d.rent_per_pyeong)).filter((n): n is number => n !== null && n > 0);
-    const avgRent = rents.length > 0 ? rents.reduce((s, v) => s + v, 0) / rents.length : null;
+  // 유효 집계 월이 1개 이하 — 안내 카드 (원시 데이터 월 수가 아닌 집계 결과 기준)
+  if (chartData.length <= 1) {
+    const monthLabel = chartData.length === 1 ? chartData[0].month : null;
+    const avgRent = chartData.length === 1 ? chartData[0].rent : null;
 
     return (
       <div className="rounded border border-gray-200 bg-white px-4 py-6">
@@ -116,9 +113,6 @@ export function RentTrendChart({ data }: RentTrendChartProps) {
       </div>
     );
   }
-
-  // 월별 집계
-  const chartData = aggregateByMonth(data);
 
   return (
     <div className="w-full bg-white">

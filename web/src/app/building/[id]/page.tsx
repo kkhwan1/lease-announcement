@@ -20,14 +20,14 @@ export default async function BuildingDetailPage({
 }) {
   const { id } = await params;
 
-  const detail = await fetchBuildingDetail(id);
-  if (!detail) notFound();
-
-  const [floors, trend, images] = await Promise.all([
+  // 4개 쿼리 완전 병렬화 — detail 지연이 나머지 조회를 막지 않도록.
+  const [detail, floors, trend, images] = await Promise.all([
+    fetchBuildingDetail(id),
     fetchFloorVacancies(id),
     fetchRentTrend(id),
     fetchBuildingImages(id),
   ]);
+  if (!detail) notFound();
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
