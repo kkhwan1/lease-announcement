@@ -322,16 +322,17 @@ _BUCKET_NAME = "building-images"
 
 
 def _ensure_bucket(client: Client) -> None:
-    """'building-images' 버킷이 없으면 private 버킷으로 생성.
+    """'building-images' 버킷이 없으면 public 버킷으로 생성.
 
-    멱등 — 이미 존재하면 아무것도 하지 않는다.
+    공개 임대 플랫폼이므로 anon이 <img src>로 직접 읽을 수 있게 public.
+    매물 사진은 어차피 공개 정보. 멱등 — 이미 존재하면 아무것도 하지 않는다.
     """
     try:
         buckets = client.storage.list_buckets()
         existing = {b.name for b in buckets}
         if _BUCKET_NAME not in existing:
-            client.storage.create_bucket(_BUCKET_NAME, options={"public": False})
-            logger.info("Storage 버킷 생성: %s (private)", _BUCKET_NAME)
+            client.storage.create_bucket(_BUCKET_NAME, options={"public": True})
+            logger.info("Storage 버킷 생성: %s (public)", _BUCKET_NAME)
         else:
             logger.debug("Storage 버킷 이미 존재: %s", _BUCKET_NAME)
     except Exception as exc:

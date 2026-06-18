@@ -14,3 +14,17 @@ if (!url || !anonKey) {
 export const supabase = createClient(url, anonKey, {
   auth: { persistSession: false },
 });
+
+// building-images 버킷은 public read. storage_path를 공개 이미지 URL로 변환.
+const IMAGE_BUCKET = "building-images";
+const PUBLIC_BASE = `${url}/storage/v1/object/public/${IMAGE_BUCKET}`;
+
+/** building_images.storage_path → 브라우저에서 바로 <img src>로 쓸 공개 URL. */
+export function buildingImageUrl(storagePath: string): string {
+  // 경로 세그먼트별 인코딩 (한글 broker 코드는 없지만 안전하게 공백/특수문자 대비)
+  const encoded = storagePath
+    .split("/")
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+  return `${PUBLIC_BASE}/${encoded}`;
+}
