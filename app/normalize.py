@@ -548,3 +548,62 @@ def insert_address_spacing(address: Optional[str]) -> Optional[str]:
         rest = s[m2.end():].strip()
         return f"{sido} {rest}".strip()
     return s
+
+
+# 지번 꼬리 노이즈(필지/일원 등)와 복수지번을 정리하는 패턴
+_ADDR_TAIL_NOISE_RE = re.compile(
+    r"\s*(?:외\s*\d*\s*필지|외\s*일원|일원|번지|[\[(].*?[\])])\s*$"
+)
+# 복수지번: '278-2, 278-3, 278-57' / '278-2 외 278-3' 의 첫 지번만
+_MULTI_JIBUN_RE = re.compile(r"(\d+(?:-\d+)?)(?:\s*,\s*\d+(?:-\d+)?)+")
+# 동/가 + 지번이 공백 없이 붙은 경우 띄우기: '성수동2가278-2' → '성수동2가 278-2'
+_DONG_JIBUN_GLUE_RE = re.compile(r"([가-힣]동\d*가?|[가-힣]+동|\d+가)(\d+(?:-\d+)?)\b")
+# 도로명 + 건물번호 공백 없이 붙은 경우 띄우기: '황새울로258번길29' → '황새울로258번길 29'
+_ROAD_BLDGNO_GLUE_RE = re.compile(r"((?:대로|[가-힣]로)\d*번?길)(\d+)\b")
+# 건물명 접두 + [전속]/[직거래] 등 대괄호 마커가 있으면 그 뒤 시/도부터 사용
+_BRACKET_BEFORE_SIDO_RE = re.compile(
+    r"^.*?\][^가-힣]*(?=(?:서울|부산|인천|대구|대전|광주|울산|세종|경기|강원|충청|충북|충남|전라|전북|전남|경상|경북|경남|제주))"
+)
+
+
+def clean_address_for_geocoding(address: Optional[str]) -> Optional[str]:
+    """지오코딩 성공률을 높이기 위한 주소 클렌징.
+
+    원본 주소로 지오코딩이 실패할 때 폴백으로 시도할 정리된 주소를 만든다.
+    - 건물명/전속 접두 제거 + 시도 표준화 (normalize_address 재사용)
+    - '외2필지', '일원', '번지', '[전속]…' 등 꼬리 노이즈 제거
+    - 복수지번('278-2, 278-3, 278-57')은 첫 지번만 사용
+    - 동/가와 지번이 붙은 경우 띄어쓰기 ('성수동2가278-2' → '성수동2가 278-2')
+    - 마지막에 insert_address_spacing으로 시/도/구 공백 보정
+
+    Returns:
+        정리된 주소. 입력이 비면 None. 원본과 동일하면 그대로 반환.
+    """
+    if not address:
+        return None
+    s = normalize_address(address)
+    # 대괄호 마커([전속] 등) 뒤에 실제 시/도가 또 나오면 그 지점부터 사용
+    # ('서울특별시티타워[전속] 서울시중구남대문로5가581' → '서울시중구남대문로5가581')
+    mb = _BRACKET_BEFORE_SIDO_RE.match(s)
+    if mb and mb.end() < len(s):
+        s = s[mb.end():].strip()
+        s = normalize_address(s)
+    # 복수지번 → 첫 지번
+    s = _MULTI_JIBUN_RE.sub(lambda m: m.group(1), s)
+    # 꼬리 노이즈 반복 제거 (예: '...번지일원' 처럼 중첩될 수 있음)
+    prev = None
+    while prev != s:
+        prev = s
+        s = _ADDR_TAIL_NOISE_RE.sub("", s).strip()
+    # 도로명 + 건물번호 붙음 분리 ('황새울로258번길29' → '황새울로258번길 29')
+    s = _ROAD_BLDGNO_GLUE_RE.sub(r"\1 \2", s)
+    # 동/가 + 지번 붙음 분리
+    s = _DONG_JIBUN_GLUE_RE.sub(r"\1 \2", s)
+    # 시/도 없이 일반시+구로 시작하는 경우 분리 ('성남시분당구…' → '성남시 분당구 …')
+    ms = re.match(r"^((?:(?!광역|특별|자치)[가-힣]){2,3}시)([가-힣]{1,3}(?:구|군))(?=[가-힣])", s)
+    if ms:
+        s = f"{ms.group(1)} {ms.group(2)} {s[ms.end():].strip()}".strip()
+    # 시/도/구 공백 보정
+    s = insert_address_spacing(s) or s
+    s = re.sub(r"\s+", " ", s).strip()
+    return s or None

@@ -13,7 +13,7 @@ from typing import Optional
 
 import httpx
 
-from app.normalize import insert_address_spacing
+from app.normalize import clean_address_for_geocoding, insert_address_spacing
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +74,30 @@ def geocode_vworld(address: str) -> Optional[GeoPoint]:
         return None
 
 
+def _try_geocode(address: str, kakao_key: Optional[str]) -> Optional[GeoPoint]:
+    """단일 주소 문자열로 카카오 1차 → V-World 폴백 시도."""
+    if kakao_key:
+        pt = geocode_kakao(address, kakao_key)
+        if pt:
+            return pt
+    return geocode_vworld(address)
+
+
 def geocode_address(address: Optional[str], kakao_key: Optional[str]) -> Optional[GeoPoint]:
-    """주소 정규화 후 카카오 1차 → V-World 폴백."""
+    """주소 정규화 후 카카오 1차 → V-World 폴백.
+
+    1) 시/도/구 공백 보정한 주소로 시도
+    2) 실패 시 클렌징 주소(노이즈·복수지번 제거)로 재시도
+    """
     if not address:
         return None
     norm = insert_address_spacing(address) or address
-    if kakao_key:
-        pt = geocode_kakao(norm, kakao_key)
-        if pt:
-            return pt
-    return geocode_vworld(norm)
+    pt = _try_geocode(norm, kakao_key)
+    if pt:
+        return pt
+    # 폴백: 꼬리 노이즈/복수지번 제거한 클렌징 주소로 재시도
+    cleaned = clean_address_for_geocoding(address)
+    if cleaned and cleaned != norm:
+        logger.info("지오코딩 폴백(클렌징): %r → %r", address, cleaned)
+        return _try_geocode(cleaned, kakao_key)
+    return None
