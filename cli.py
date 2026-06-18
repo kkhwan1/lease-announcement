@@ -210,7 +210,7 @@ def cmd_batch(pdf_dir: str, out_dir: str) -> int:
 # push 커맨드: PDF 재파싱 → Supabase 적재 (pipeline + store_document 연동)
 # ---------------------------------------------------------------------------
 
-def cmd_push(pdf_dir: str, out_dir: str, enrich: bool = False) -> int:
+def cmd_push(pdf_dir: str, out_dir: str, enrich: bool = False, with_images: bool = True) -> int:
     """폴더 내 모든 PDF를 파싱해 Supabase에 적재.
 
     흐름:
@@ -219,6 +219,8 @@ def cmd_push(pdf_dir: str, out_dir: str, enrich: bool = False) -> int:
       3. (enrich=True) 각 건물에 건축물대장 API 보강 (빈 필드만 채움)
       4. supa_store.store_document → Supabase upsert
       5. 중개사별 적재 통계 출력
+
+    with_images=False면 이미지 추출/Storage 업로드를 건너뛴다(텍스트 적재만, 빠름).
     """
     from app.supa_store import store_document
 
@@ -260,7 +262,8 @@ def cmd_push(pdf_dir: str, out_dir: str, enrich: bool = False) -> int:
         # 이미지 crop PNG의 수명을 store_document 호출 이후까지 보장하기 위해
         # 임시 디렉토리를 push 루프 안에서 직접 관리한다.
         with tempfile.TemporaryDirectory(prefix="lease_imgs_") as tmp_img_dir:
-            img_out_dir = Path(tmp_img_dir)
+            # with_images=False면 이미지 추출/업로드 생략 (img_out_dir=None)
+            img_out_dir = Path(tmp_img_dir) if with_images else None
             try:
                 source_doc = process_pdf(pdf, img_out_dir=img_out_dir)
             except Exception as exc:
@@ -354,6 +357,8 @@ def main() -> int:
     p_push.add_argument("--out", default="out/", help="JSON 출력 디렉토리 (기본: out/)")
     p_push.add_argument("--enrich", action="store_true",
                         help="건축물대장 API로 빈 필드 보강 후 적재")
+    p_push.add_argument("--no-images", action="store_true",
+                        help="이미지 추출/Storage 업로드 생략 (텍스트만, 빠름)")
 
     args = parser.parse_args()
 
@@ -362,7 +367,8 @@ def main() -> int:
     elif args.cmd == "batch":
         return cmd_batch(args.dir, args.out)
     elif args.cmd == "push":
-        return cmd_push(args.pdf_dir, args.out, enrich=args.enrich)
+        return cmd_push(args.pdf_dir, args.out, enrich=args.enrich,
+                        with_images=not args.no_images)
 
     return 0
 
