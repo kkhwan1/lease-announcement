@@ -1,0 +1,32 @@
+[project]
+name = "lease-pipeline"
+version = "0.1.0"
+description = "부동산 임대 매물 안내문 PDF → 구조화 데이터(Supabase) 파이프라인"
+requires-python = ">=3.12"
+dependencies = [
+    "pymupdf>=1.24",      # PDF 텍스트/표/이미지 추출 (find_tables). AGPL-3.0 — 내부 도구
+    "pdfplumber>=0.11",   # 표 보강 폴백 (MIT)
+    "pydantic>=2.7",      # 추출 결과 스키마 검증
+    "rapidfuzz>=3.9",     # 건물명 fuzzy 매칭 (Entity Resolution)
+    "supabase>=2.6",      # Supabase 적재
+    "python-dotenv>=1.0", # .env 로드
+]
+
+[project.optional-dependencies]
+ocr = [
+    "rapidocr-onnxruntime>=1.3",  # 이미지-only 페이지 OCR 폴백 (Apache 2.0, CPU)
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
