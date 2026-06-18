@@ -54,6 +54,7 @@ from typing import Any
 
 from app.enrich.base import Enricher
 from app.schemas import BuildingExtraction
+from app.normalize import clean_address_for_geocoding, insert_address_spacing
 
 logger = logging.getLogger(__name__)
 
@@ -351,18 +352,31 @@ class BuildingRegisterEnricher(Enricher):
             return b
 
         # 조회용 주소: 도로명 우선 → 지번 → raw
-        addr = b.address_road or b.address_jibun or b.address_raw
-        if not addr:
+        raw_addr = b.address_road or b.address_jibun or b.address_raw
+        if not raw_addr:
             logger.warning(
                 "[BuildingRegisterEnricher] %s — 주소 없음, 보강 불가", b.building_name
             )
             return b
+
+        # DB 주소는 시/구/도로명이 붙어있어("서울특별시종로구종로33") V-World가 파싱 실패함.
+        # geocode.py와 동일하게 띄어쓰기 정규화 후 조회, 실패 시 클렌징 주소로 폴백.
+        addr = insert_address_spacing(raw_addr) or raw_addr
 
         logger.info(
             "[BuildingRegisterEnricher] %s 보강 시작 — addr=%s", b.building_name, addr
         )
 
         fr = _fetch_cached(addr, self.timeout)
+        if fr is None or not fr.title_item:
+            # 1차 실패 — 클렌징 주소(부번/특수문자 제거)로 재시도
+            cleaned = clean_address_for_geocoding(raw_addr)
+            if cleaned and cleaned != addr:
+                logger.info(
+                    "[BuildingRegisterEnricher] %s 클렌징 폴백 — addr=%s",
+                    b.building_name, cleaned,
+                )
+                fr = _fetch_cached(cleaned, self.timeout)
         if fr is None:
             return b
 

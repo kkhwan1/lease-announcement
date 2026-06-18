@@ -23,9 +23,9 @@ interface BuildingOverviewProps {
 function DefinitionRow({ label, value }: { label: string; value: string | null }) {
   if (value === null || value.trim() === "" || value === "-") return null;
   return (
-    <div className="flex gap-2 py-1.5">
-      <dt className="w-24 shrink-0 text-body-sm font-bold text-ink">{label}</dt>
-      <dd className="text-body-sm text-charcoal">{value}</dd>
+    <div className="flex items-center justify-between gap-2 py-1.5">
+      <dt className="shrink-0 text-body-sm font-bold text-ink">{label}</dt>
+      <dd className="text-right text-body-sm text-charcoal">{value}</dd>
     </div>
   );
 }
@@ -123,12 +123,16 @@ export function BuildingOverview({ detail, section }: BuildingOverviewProps) {
         />
       </dl>
 
-      {/* 건축물대장부 — 값이 하나라도 있을 때만, 소제목으로 구분 */}
+      {/* 건축물대장부 — 값이 하나라도 있을 때만. 소제목 + 출처 배지(국토교통부)로
+          이 값들이 공공 건축물대장에서 온 것임을 명시. */}
       {hasBuildingRegistry && (
         <>
-          <h3 className="mb-2 mt-4 text-body-sm font-bold text-steel">
-            건축물대장
-          </h3>
+          <div className="mb-2 mt-4 flex items-center gap-2">
+            <h3 className="text-body-sm font-bold text-steel">건축물대장</h3>
+            <span className="rounded-full bg-surface-soft px-2 py-0.5 text-caption text-steel">
+              국토교통부
+            </span>
+          </div>
           <dl className="divide-y divide-hairline-soft">
             <DefinitionRow label="주용도" value={main_purpose} />
             <DefinitionRow
@@ -140,7 +144,7 @@ export function BuildingOverview({ detail, section }: BuildingOverviewProps) {
               value={formatPercent(floor_area_ratio)}
             />
             <DefinitionRow
-              label="높이"
+              label="건축물 높이(m)"
               value={height_m !== null ? `${height_m}m` : null}
             />
             <DefinitionRow label="대지면적" value={formatSqm(land_area_sqm)} />
