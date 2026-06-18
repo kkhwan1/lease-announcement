@@ -68,15 +68,17 @@ export default async function BuildingDetailPage({
         )}
       </div>
 
-      <section className="mb-12">
-        <PhotoGallery images={images} />
+      {/* 상단 2단 — 왼쪽 사진(7) / 오른쪽 건물개요(5). 모바일은 1단 세로. */}
+      <section className="mb-12 grid grid-cols-1 gap-6 md:grid-cols-12">
+        <div className="md:col-span-7">
+          <PhotoGallery images={images} />
+        </div>
+        <div className="md:col-span-5">
+          <BuildingOverview detail={detail} section="overview" />
+        </div>
       </section>
 
-      <section className="mb-12">
-        <BuildingOverview detail={detail} />
-      </section>
-
-      {/* 위치 — 카카오 지도로 건물 1개 표시 */}
+      {/* 위치 — 사진 바로 아래. 카카오 지도로 건물 1개 표시 */}
       <section className="mb-12">
         <SectionHeading level={3} className="mb-4">위치</SectionHeading>
         <BuildingLocationMap
@@ -87,6 +89,11 @@ export default async function BuildingDetailPage({
         {detail.address_road && (
           <p className="mt-3 text-body-sm text-steel">{detail.address_road}</p>
         )}
+      </section>
+
+      {/* 건축물대장 + 특장점 — 전폭 2열 */}
+      <section className="mb-12">
+        <BuildingOverview detail={detail} section="registry" />
       </section>
 
       <section className="mb-12">
