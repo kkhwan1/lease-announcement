@@ -474,3 +474,39 @@ def parse_scale(s: str) -> Tuple[Optional[int], Optional[int]]:
         return int(m.group(1)), None
 
     return None, None
+
+
+# ---------------------------------------------------------------------------
+# 주소 공백 정규화 (C&W식 공백없는 주소 → 지오코딩용)
+# ---------------------------------------------------------------------------
+
+# 시/도 명칭 (긴 것 우선 매칭)
+_SIDO_NAMES = [
+    "서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시",
+    "대전광역시", "울산광역시", "세종특별자치시", "경기도", "강원특별자치도",
+    "충청북도", "충청남도", "전라북도", "전북특별자치도", "전라남도",
+    "경상북도", "경상남도", "제주특별자치도", "서울", "부산", "대구",
+    "인천", "광주", "대전", "울산", "세종",
+]
+_SIDO_PATTERN = "|".join(_SIDO_NAMES)
+# "<시도><구/군/시>" 가 공백 없이 붙은 경우를 분리
+_SPACELESS_RE = re.compile(
+    rf"^({_SIDO_PATTERN})\s*([가-힣]{{1,4}}(?:구|군|시))\s*"
+)
+
+
+def insert_address_spacing(address: Optional[str]) -> Optional[str]:
+    """C&W식 공백없는 주소에 시·도/구 사이 공백을 삽입.
+
+    '서울특별시종로구율곡로 2길19' → '서울특별시 종로구 율곡로 2길19'
+    이미 공백이 정상이면 그대로 반환.
+    """
+    if not address:
+        return address
+    s = address.strip()
+    m = _SPACELESS_RE.match(s)
+    if not m:
+        return s
+    sido, gu = m.group(1), m.group(2)
+    rest = s[m.end():].strip()
+    return f"{sido} {gu} {rest}".strip()
