@@ -46,6 +46,15 @@ _BUILDING_DIRECT_COLS = frozenset({
     "parking_total",
     "parking_terms_raw",
     "features_raw",
+    # 건축물대장/지오코딩 보강 필드 (0019 마이그레이션으로 추가)
+    "main_purpose",
+    "building_coverage_ratio",
+    "floor_area_ratio",
+    "height_m",
+    "land_area_sqm",
+    "use_zone",
+    "latitude",
+    "longitude",
 })
 
 
@@ -100,6 +109,8 @@ def _build_field_map(b: BuildingExtraction) -> dict[str, Any]:
         "height_m": b.height_m,
         "land_area_sqm": b.land_area_sqm,
         "use_zone": b.use_zone,
+        "latitude": b.latitude,
+        "longitude": b.longitude,
     }
 
 
