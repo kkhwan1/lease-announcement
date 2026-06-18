@@ -480,18 +480,23 @@ def parse_scale(s: str) -> Tuple[Optional[int], Optional[int]]:
 # 주소 공백 정규화 (C&W식 공백없는 주소 → 지오코딩용)
 # ---------------------------------------------------------------------------
 
-# 시/도 명칭 (긴 것 우선 매칭)
+# 시/도 명칭 (긴 것 우선 매칭). 축약형('서울시' 등)도 포함.
 _SIDO_NAMES = [
     "서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시",
     "대전광역시", "울산광역시", "세종특별자치시", "경기도", "강원특별자치도",
-    "충청북도", "충청남도", "전라북도", "전북특별자치도", "전라남도",
-    "경상북도", "경상남도", "제주특별자치도", "서울", "부산", "대구",
-    "인천", "광주", "대전", "울산", "세종",
+    "강원도", "충청북도", "충청남도", "전라북도", "전북특별자치도", "전라남도",
+    "경상북도", "경상남도", "제주특별자치도",
+    "서울시", "부산시", "대구시", "인천시", "광주시", "대전시", "울산시",
+    "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
 ]
+# 긴 명칭 우선 매칭 (서울특별시 > 서울시 > 서울)
+_SIDO_NAMES.sort(key=len, reverse=True)
 _SIDO_PATTERN = "|".join(_SIDO_NAMES)
-# "<시도><구/군/시>" 가 공백 없이 붙은 경우를 분리
-_SPACELESS_RE = re.compile(
-    rf"^({_SIDO_PATTERN})\s*([가-힣]{{1,4}}(?:구|군|시))\s*"
+
+# 시/도 직후의 구/군. 단, '구/군' 뒤에 도로명 토큰(대로/로/길/동/읍/면/가/숫자)이
+# 이어질 때만 진짜 행정구로 인정 → '달구벌대로'의 '달구'를 구로 오인하지 않음.
+_SIDO_GU_RE = re.compile(
+    rf"^({_SIDO_PATTERN})\s*([가-힣]{{1,3}}(?:구|군))(?=[가-힣]*(?:대로|로|길|동|읍|면|가|\d))\s*"
 )
 
 
@@ -499,14 +504,28 @@ def insert_address_spacing(address: Optional[str]) -> Optional[str]:
     """C&W식 공백없는 주소에 시·도/구 사이 공백을 삽입.
 
     '서울특별시종로구율곡로 2길19' → '서울특별시 종로구 율곡로 2길19'
-    이미 공백이 정상이면 그대로 반환.
+    '서울시성동구뚝섬로17가길49'   → '서울시 성동구 뚝섬로17가길49'
+    이미 공백이 정상이면 그대로 반환. 구 분리가 모호하면 시/도만 띄우고
+    나머지는 지오코더의 자체 파싱에 맡긴다.
     """
     if not address:
         return address
     s = address.strip()
-    m = _SPACELESS_RE.match(s)
-    if not m:
+
+    # 이미 시/도 뒤에 공백이 있으면(정상 주소) 손대지 않는다.
+    if re.match(rf"^({_SIDO_PATTERN})\s", s):
         return s
-    sido, gu = m.group(1), m.group(2)
-    rest = s[m.end():].strip()
-    return f"{sido} {gu} {rest}".strip()
+
+    m = _SIDO_GU_RE.match(s)
+    if m:
+        sido, gu = m.group(1), m.group(2)
+        rest = s[m.end():].strip()
+        return f"{sido} {gu} {rest}".strip()
+
+    # 구 분리 실패 시: 시/도 명칭만이라도 띄워준다 (지오코더 자체 파싱에 위임).
+    m2 = re.match(rf"^({_SIDO_PATTERN})(?=[가-힣])", s)
+    if m2:
+        sido = m2.group(1)
+        rest = s[m2.end():].strip()
+        return f"{sido} {rest}".strip()
+    return s
