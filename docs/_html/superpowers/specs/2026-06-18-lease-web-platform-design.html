@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>임대매물 공개 플랫폼 — 웹 설계 문서</title>
+<style>
+:root{--bg:#0f1115;--panel:#161922;--fg:#e6e9ef;--muted:#9aa3b2;--accent:#6ea8fe;--accent2:#7ee3c7;--border:#262b36;--code:#1b1f29;--th:#1d2230}
+@media(prefers-color-scheme:light){:root{--bg:#f7f8fa;--panel:#fff;--fg:#1b2330;--muted:#5b6573;--accent:#2f6fed;--accent2:#0e9f6e;--border:#e3e7ee;--code:#f0f2f6;--th:#eef1f6}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Segoe UI",Roboto,sans-serif;line-height:1.7;font-size:16px}
+.layout{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--border);padding:24px 18px}
+nav.toc .brand{font-weight:800;font-size:15px;letter-spacing:.02em;color:var(--accent);margin-bottom:4px}
+nav.toc .sub{font-size:12px;color:var(--muted);margin-bottom:18px}
+nav.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 8px;border-radius:6px;font-size:13.5px;border-left:2px solid transparent}
+nav.toc a:hover{color:var(--fg);background:rgba(110,168,254,.08)}
+nav.toc a.lvl2{padding-left:18px}
+nav.toc a.lvl3{padding-left:30px;font-size:12.5px}
+nav.toc a.doc{font-weight:700;color:var(--fg);margin-top:14px}
+main{padding:48px 56px;max-width:920px;margin:0 auto;width:100%;overflow-x:hidden}
+main h1{font-size:30px;font-weight:800;margin:.2em 0 .6em;line-height:1.25}
+main h2{font-size:22px;font-weight:750;margin:1.8em 0 .5em;padding-bottom:.3em;border-bottom:1px solid var(--border)}
+main h3{font-size:18px;font-weight:700;margin:1.4em 0 .4em}
+main h4{font-size:15.5px;font-weight:700;color:var(--muted);margin:1.2em 0 .3em}
+main p{margin:.7em 0}
+a{color:var(--accent)}
+code{background:var(--code);padding:.12em .4em;border-radius:5px;font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.88em}
+pre.code{background:var(--code);border:1px solid var(--border);border-radius:10px;padding:16px 18px;overflow:auto;font-size:13px;line-height:1.55}
+pre.code code{background:none;padding:0}
+blockquote{margin:1em 0;padding:.6em 1.1em;border-left:3px solid var(--accent);background:rgba(110,168,254,.07);border-radius:0 8px 8px 0;color:var(--fg)}
+ul,ol{padding-left:1.4em;margin:.6em 0}
+li{margin:.25em 0}
+li.task{list-style:none;margin-left:-1.2em}
+li.task input{margin-right:.5em}
+hr{border:none;border-top:1px solid var(--border);margin:2em 0}
+.table-wrap{overflow-x:auto;margin:1em 0;border:1px solid var(--border);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:9px 13px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+th{background:var(--th);font-weight:700;white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:rgba(110,168,254,.05)}
+img{max-width:100%;border-radius:8px}
+.doc-section{padding-top:8px}
+.doc-section+.doc-section{margin-top:24px;border-top:2px dashed var(--border);padding-top:32px}
+.meta-foot{margin-top:64px;padding-top:20px;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+.idx-card{display:block;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin:10px 0;text-decoration:none;color:var(--fg);transition:.15s}
+.idx-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.idx-card .t{font-weight:700;font-size:15px}
+.idx-card .p{color:var(--muted);font-size:13px;margin-top:3px}
+.idx-group{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin:24px 0 6px}
+@media(max-width:860px){.layout{grid-template-columns:1fr}nav.toc{position:static;height:auto;border-right:none;border-bottom:1px solid var(--border)}main{padding:28px 20px}}
+</style>
+</head><body>
+<div class="layout">
+<nav class="toc"><div class="brand">임대매물 공개 플랫폼 — 웹 설계 문서</div><div class="sub">2026-06-18-lease-web-platform-design.md</div><a class="lvl1" href="#임대매물-공개-플랫폼-웹-설계-문서">임대매물 공개 플랫폼 — 웹 설계 문서</a><a class="lvl2" href="#1-context-왜-만드는가">1. Context — 왜 만드는가</a><a class="lvl3" href="#결정-요약-브레인스토밍-확정">결정 요약 (브레인스토밍 확정)</a><a class="lvl2" href="#2-아키텍처">2. 아키텍처</a><a class="lvl3" href="#보안-원칙-공개-플랫폼의-핵심">보안 원칙 (공개 플랫폼의 핵심)</a><a class="lvl2" href="#3-데이터-모델-월별-추이-신규-핵심">3. 데이터 모델 — 월별 추이 (신규 핵심)</a><a class="lvl3" href="#기존-스키마가-이미-지원하는-것-검증-완료">기존 스키마가 이미 지원하는 것 (검증 완료)</a><a class="lvl3" href="#추이-추적을-위해-보장해야-할-것">추이 추적을 위해 보장해야 할 것</a><a class="lvl3" href="#신규-추이-뷰-v_rent_trend">신규 추이 뷰 `v_rent_trend`</a><a class="lvl2" href="#4-화면-전용-뷰-공개-조회-최적화">4. 화면 전용 뷰 (공개 조회 최적화)</a><a class="lvl2" href="#4-1-ui-디자인-시스템-사용자-지정">4-1. UI 디자인 시스템 (사용자 지정)</a><a class="lvl2" href="#5-페이지-구성-사이트맵">5. 페이지 구성 (사이트맵)</a><a class="lvl3" href="#화면-1-홈-지도리스트-분할-메인">화면 1. 홈 `/` — 지도+리스트 분할 (메인)</a><a class="lvl3" href="#화면-2-건물-상세-buildingid-핵심">화면 2. 건물 상세 `/building/[id]` (핵심)</a><a class="lvl3" href="#화면-35">화면 3~5</a><a class="lvl2" href="#6-프로젝트-구조-신규-web">6. 프로젝트 구조 (신규 `web/`)</a><a class="lvl3" href="#카카오-키-한-줄만-넣으면-작동-구조">카카오 키 &quot;한 줄만 넣으면 작동&quot; 구조</a><a class="lvl2" href="#7-사전-데이터-작업-phase-0">7. 사전 데이터 작업 (Phase 0)</a><a class="lvl2" href="#8-구현-순서-phase">8. 구현 순서 (Phase)</a><a class="lvl2" href="#9-검증-end-to-end">9. 검증 (end-to-end)</a><a class="lvl2" href="#10-미해결구현-중-확정">10. 미해결/구현 중 확정</a></nav>
+<main><h1 id="임대매물-공개-플랫폼-웹-설계-문서">임대매물 공개 플랫폼 — 웹 설계 문서</h1>
+<blockquote>작성: 2026-06-18 · 대상: 직방/다방식 공개 상업용 임대매물 플랫폼 백엔드(DB) 완성 상태에서 <strong>공개 웹 프론트엔드</strong>를 신규 구축한다.</blockquote>
+<hr>
+<h2 id="1-context-왜-만드는가">1. Context — 왜 만드는가</h2>
+<p>사용자(1인 부동산·금융 테크 기업가)는 여러 중개사(C&amp;W·오스카·에스원·JLL)의 월별 임대 안내문 PDF를 파싱·정규화해 <strong>건물 마스터 DB</strong>(260개 건물·1,116층 공실·임대료)를 구축했다. 이제 이 데이터를 <strong>직방/다방처럼 누구나 로그인 없이 볼 수 있는 공개 매물 플랫폼</strong>으로 서비스한다.</p>
+<p>추가 핵심 요구:</p>
+<ul><li><strong>월별 갱신·추이 추적</strong>: 매월 새 안내문을 적재하면서 임대료 등의 <strong>시계열 추이</strong>를 본다. DB의 <code>listing_snapshots</code>(건물×중개사×월) 구조가 이를 이미 지원한다.</li><li><strong>지도 키만 넣으면 작동</strong>: 카카오맵 키 한 줄(<code>.env.local</code>)만 설정하면 지도가 동작하는 구조.</li></ul>
+<h3 id="결정-요약-브레인스토밍-확정">결정 요약 (브레인스토밍 확정)</h3>
+<div class="table-wrap"><table><thead><tr><th>항목</th><th>결정</th></tr></thead><tbody><tr><td>MVP 목적</td><td>공개 매물 조회·검색 플랫폼 (직방/다방식)</td></tr><tr><td>접근</td><td><strong>로그인 없음</strong> — 누구나 공개 열람</td></tr><tr><td>메인 UX</td><td><strong>지도+리스트 분할</strong> (좌 리스트 / 우 지도)</td></tr><tr><td>지도</td><td><strong>카카오맵</strong> (Kakao Maps JS SDK)</td></tr><tr><td>상세 공개범위</td><td>건물기본+사진 · 층별공실 · <strong>임대료/관리비</strong> · 건축물대장 · <strong>특장점</strong> 전부 공개</td></tr><tr><td>임대료 노출</td><td>카드 + 테이블 양쪽</td></tr><tr><td>스택</td><td><strong>Next.js 15 (App Router) + Supabase + Vercel</strong></td></tr><tr><td>추이</td><td>월별 스냅샷 누적 → 상세에 임대료 시계열 차트</td></tr><tr><td>UI 테마</td><td><strong>라이트(흰 배경) 단일 테마</strong>, 다크모드 없음</td></tr><tr><td>아이콘</td><td><strong>이모지 전면 금지</strong>. 필요한 아이콘은 SVG 라이브러리(lucide-react)만 사용</td></tr></tbody></table></div>
+<hr>
+<h2 id="2-아키텍처">2. 아키텍처</h2>
+<pre class="code"><code>[브라우저 - 누구나 로그인 없이]
+   │  Next.js 15 App Router (SSR/ISR)
+   │  카카오맵 JS SDK (.env.local 키)
+   ▼
+[Vercel]
+   ├─ 공개 조회 → Supabase anon 키 (SELECT-only RLS)   ← 브라우저 안전
+   ├─ 이미지 → Storage public 버킷
+   └─ 적재/보강(월별) → service_role (서버/CLI 전용, 브라우저 노출 금지)</code></pre>
+<h3 id="보안-원칙-공개-플랫폼의-핵심">보안 원칙 (공개 플랫폼의 핵심)</h3>
+<ul><li>공개되는 데이터: <strong>건물·공실·임대료·이미지·중개사명</strong>뿐.</li><li>내부 테이블(<code>raw_extractions</code>·<code>source_documents</code>·<code>review_queue</code>·<code>merge_candidates</code>·<code>building_field_values</code>)은 <strong>anon 정책 미부여 = 접근 차단</strong>.</li><li><code>service_role</code> 키는 <strong>절대 <code>NEXT_PUBLIC_*</code>에 넣지 않음</strong>. 브라우저는 anon 키만.</li><li>anon은 <strong>SELECT만</strong>, INSERT/UPDATE/DELETE 차단.</li></ul>
+<hr>
+<h2 id="3-데이터-모델-월별-추이-신규-핵심">3. 데이터 모델 — 월별 추이 (신규 핵심)</h2>
+<h3 id="기존-스키마가-이미-지원하는-것-검증-완료">기존 스키마가 이미 지원하는 것 (검증 완료)</h3>
+<p><code>listing_snapshots</code> (0007):</p>
+<ul><li><code>snapshot_month date</code> (YYYY-MM-01) + UNIQUE <code>(building_id, broker_id, snapshot_month)</code> → <strong>월별 이력 누적</strong>.</li><li><code>is_latest boolean</code> + demote 트리거 → 조합당 최신 1건만 true, <strong>과거 스냅샷은 <code>is_latest=false</code>로 보존</strong>.</li></ul>
+<h3 id="추이-추적을-위해-보장해야-할-것">추이 추적을 위해 보장해야 할 것</h3>
+<p>매월 재적재 시 과거 임대료를 보려면 <strong>과거 스냅샷의 <code>rent_terms</code>/<code>floor_availabilities</code>가 삭제되지 않고 보존</strong>되어야 한다.</p>
+<ul><li><code>rent_terms</code>/<code>floor_availabilities</code>는 <code>listing_snapshot_id</code> FK로 특정 월 스냅샷에 묶인다.</li><li>월별 적재 흐름: 새 달 = 새 <code>snapshot_month</code> 행 INSERT(새 id) → 그 id로 rent_terms 적재 → 이전 달 행은 <code>is_latest=false</code>로 강등되지만 <strong>데이터는 그대로 남음</strong>.</li><li><strong>적재 코드 점검 필요</strong>: 현재 <code>supa_store.py</code>가 같은 (building,broker)에 대해 월이 바뀔 때 과거 rent_terms를 지우지 않는지(덮어쓰기 아님) 확인. 덮어쓰면 추이 불가 → 구현 Phase 0에서 검증·수정.</li></ul>
+<h3 id="신규-추이-뷰-v_rent_trend">신규 추이 뷰 <code>v_rent_trend</code></h3>
+<pre class="code"><code>building_id, broker, snapshot_month, scope_label,
+rent_per_pyeong, maintenance_per_pyeong, deposit_per_pyeong
+  ← listing_snapshots(전체, is_latest 무관) + rent_terms
+  ← snapshot_month 오름차순</code></pre>
+<p>상세 페이지에서 building_id로 필터 → 월별 평당 임대료 라인차트.</p>
+<hr>
+<h2 id="4-화면-전용-뷰-공개-조회-최적화">4. 화면 전용 뷰 (공개 조회 최적화)</h2>
+<div class="table-wrap"><table><thead><tr><th>뷰</th><th>용도</th><th>핵심 컬럼</th></tr></thead><tbody><tr><td><code>v_buildings_summary</code></td><td>홈/검색 카드 리스트</td><td>building<em>id, name, district, address</em>road, 공실수, <strong>최저 평당임대료</strong>, 대표 썸네일, lat, lng</td></tr><tr><td><code>v_buildings_map</code></td><td>지도 핀(경량)</td><td>building_id, name, lat, lng, district, 공실수 (좌표 있는 건물만)</td></tr><tr><td><code>v_building_detail</code></td><td>상세 한 방 조회</td><td>buildings 전체 + 건축물대장 8필드 + features_raw + 출처 요약</td></tr><tr><td><code>v_current_vacancies</code></td><td>상세 층별공실 (기존 재사용)</td><td>building_id 필터로 사용</td></tr><tr><td><code>v_rent_trend</code></td><td>상세 임대료 추이 (신규)</td><td>위 §3</td></tr></tbody></table></div>
+<p>성능 한계 시 <code>v_buildings_summary</code>를 <strong>materialized view</strong> 전환 + 월 적재 후 <code>refresh</code>.</p>
+<hr>
+<h2 id="4-1-ui-디자인-시스템-사용자-지정">4-1. UI 디자인 시스템 (사용자 지정)</h2>
+<ul><li><strong>라이트 테마 단일</strong>: 흰 배경(<code>#ffffff</code>), 본문 텍스트 짙은 회색(<code>#1a1a1a</code> 계열), 다크모드 미지원.</li><li><strong>깔끔/미니멀</strong>: 직방식 정보 밀도. 카드는 흰 배경 + 옅은 보더(<code>#e5e7eb</code>) + 미세 그림자. 강조색은 절제된 1색(예: 블루 계열) 포인트.</li><li><strong>이모지 전면 금지</strong>: 본문/버튼/헤더 어디에도 이모지 사용 안 함. 아이콘이 필요하면 <code>lucide-react</code> SVG 컴포넌트만 사용.</li><li>Tailwind CSS 기반, 기본 폰트는 시스템 한글 폰트 스택(Pretendard 우선).</li></ul>
+<hr>
+<h2 id="5-페이지-구성-사이트맵">5. 페이지 구성 (사이트맵)</h2>
+<pre class="code"><code>/                  홈 = 지도+리스트 분할 (메인 탐색)
+/building/[id]     건물 상세 (핵심 자산)
+/search            검색 결과 (필터 리스트, 홈과 컴포넌트 공유)
+/about             서비스 소개 + 면책(중개 아님, 정보 제공)
+공통: 헤더(검색바·권역탭) / 푸터(데이터 출처·갱신일·건수)</code></pre>
+<h3 id="화면-1-홈-지도리스트-분할-메인">화면 1. 홈 <code>/</code> — 지도+리스트 분할 (메인)</h3>
+<ul><li><strong>좌: 건물 카드 리스트</strong> — 건물명 · 권역+주소 · 공실 개수 · <strong>최저 평당 임대료</strong> · 외관 썸네일. 정렬(임대료·면적·준공년·공실수). 무한스크롤.</li><li><strong>우: 카카오 지도</strong> — 핀 + 클러스터, hover 미니카드, <strong>핀↔카드 양방향 연동</strong>, &quot;이 지역 재검색&quot;.</li><li><strong>상단 필터</strong> — 권역(GBD/CBD/YBD/BBD/ETC) · 전용/임대 면적범위 · 평당 임대료범위 · 즉시입주 · 준공년도. → <code>v_current_vacancies</code> 컬럼과 1:1.</li><li>데이터: <code>v_buildings_summary</code> + <code>v_buildings_map</code>.</li></ul>
+<h3 id="화면-2-건물-상세-buildingid-핵심">화면 2. 건물 상세 <code>/building/[id]</code> (핵심)</h3>
+<p>순서대로:</p>
+<ol><li><strong>사진 갤러리</strong> — building_images (외관→로비→평면도).</li><li><strong>건물 개요</strong> — 주소·권역·준공·규모(층/연면적)·전용률·주차·천정고·EV.</li><li><strong>위치 미니맵</strong> — 카카오 단일 핀 + 근접역.</li><li><strong>건축물대장</strong> — 건폐율·용적률·주용도·용도지역 등 8필드(있을 때만).</li><li><strong>층별 공실 테이블</strong> 1순위 — 층 · 전용(평) · 임대(평) · 입주 · <strong>평당 임대료/관리비</strong>. 평↔㎡ 토글. Total행 제외.</li><li><strong>특장점 섹션</strong> — <code>buildings.features_raw</code> 표시.</li><li><strong>임대료 추이 차트</strong> — <code>v_rent_trend</code> 월별 라인차트.</li><li><strong>데이터 출처</strong> — &quot;C&amp;W·오스카 안내문(2026.06) + 건축물대장&quot; 투명 표기.</li></ol>
+<h3 id="화면-35">화면 3~5</h3>
+<ul><li><code>/search</code> — 홈 필터를 URL 쿼리로 받는 전체화면 리스트(지도 접기). 카드 컴포넌트 공유.</li><li><code>/about</code> — 데이터 출처·갱신주기·면책.</li><li>공통 푸터 — 마지막 갱신일·데이터 건수·출처 중개사.</li></ul>
+<hr>
+<h2 id="6-프로젝트-구조-신규-web">6. 프로젝트 구조 (신규 <code>web/</code>)</h2>
+<pre class="code"><code>Lease Announcemen/
+├── app/ ...                 # 기존 Python 파이프라인 (유지)
+├── cli.py                   # + geocode 명령 추가
+├── supabase/migrations/
+│   ├── 0020_public_rls.sql      # anon SELECT-only 공개 정책
+│   ├── 0021_web_views.sql       # v_buildings_summary/map/detail
+│   └── 0022_rent_trend_view.sql # v_rent_trend
+└── web/                     # 신규 Next.js 15
+    ├── app/
+    │   ├── page.tsx                 # 홈 (지도+리스트)
+    │   ├── building/[id]/page.tsx   # 상세
+    │   ├── search/page.tsx
+    │   └── about/page.tsx
+    ├── components/
+    │   ├── KakaoMap.tsx             # 키 없으면 안내 placeholder, 있으면 SDK 동적 로드
+    │   ├── BuildingCard.tsx         # 임대료 노출
+    │   ├── FilterBar.tsx
+    │   ├── FloorTable.tsx           # 평↔㎡ 토글
+    │   ├── PhotoGallery.tsx
+    │   ├── FeatureSection.tsx       # 특장점
+    │   └── RentTrendChart.tsx       # 월별 추이
+    ├── lib/supabase.ts              # anon 클라이언트
+    ├── lib/queries.ts               # 뷰 조회 함수
+    ├── .env.local.example           # NEXT_PUBLIC_* + NEXT_PUBLIC_KAKAO_MAP_KEY
+    └── README.md                    # &quot;카카오 키 한 줄 넣고 npm run dev&quot;</code></pre>
+<h3 id="카카오-키-한-줄만-넣으면-작동-구조">카카오 키 &quot;한 줄만 넣으면 작동&quot; 구조</h3>
+<ul><li><code>KakaoMap.tsx</code>는 <code>process.env.NEXT_PUBLIC_KAKAO_MAP_KEY</code>를 읽어:<ul><li><strong>키 있음</strong> → <code>//dapi.kakao.com/v2/maps/sdk.js?appkey=KEY&amp;autoload=false</code> 스크립트 동적 주입 → 지도 렌더.</li><li><strong>키 없음</strong> → &quot;카카오맵 키를 .env.local에 입력하세요&quot; placeholder 표시(앱은 죽지 않음, 리스트는 정상 작동).</li></ul></li><li>사용자는 <a href="https://developers.kakao.com">developers.kakao.com</a> → 앱 생성 → JavaScript 키 → <code>.env.local</code>에 <code>NEXT_PUBLIC_KAKAO_MAP_KEY=...</code> 한 줄.</li><li>Vercel 배포 시 동일 키를 환경변수로 등록.</li></ul>
+<hr>
+<h2 id="7-사전-데이터-작업-phase-0">7. 사전 데이터 작업 (Phase 0)</h2>
+<div class="table-wrap"><table><thead><tr><th>#</th><th>작업</th><th>이유</th><th>방법</th></tr></thead><tbody><tr><td>1</td><td><strong>좌표 보강</strong></td><td>지도 핀 필수. lat/lng 대부분 NULL</td><td><code>cli.py geocode</code> 신규: NULL 행 → kk<em>real</em>estate <code>geocoder.resolve(address_road)</code> → UPDATE. C&amp;W 공백없는 주소는 시·구 공백 정규화 후 호출</td></tr><tr><td>2</td><td><strong>이미지 Storage 적재</strong></td><td>사진 표시. 현재 file_path NULL</td><td><code>cli.py push --with-images</code> → <strong>public 버킷</strong> 업로드</td></tr><tr><td>3</td><td><strong>RLS 공개 정책</strong></td><td>익명 읽기</td><td>0020: 공개 테이블에 anon SELECT, 내부 테이블 차단</td></tr><tr><td>4</td><td><strong>추이 보존 검증</strong></td><td>월별 추이</td><td>supa<em>store가 과거 rent</em>terms 덮어쓰지 않는지 확인·수정</td></tr></tbody></table></div>
+<hr>
+<h2 id="8-구현-순서-phase">8. 구현 순서 (Phase)</h2>
+<div class="table-wrap"><table><thead><tr><th>Phase</th><th>내용</th><th>게이트</th></tr></thead><tbody><tr><td><strong>0. 데이터 준비</strong></td><td>좌표 보강 + 이미지 적재 + RLS(0020) + 뷰(0021/0022) + 추이보존 검증</td><td>260건물 좌표·이미지·anon읽기·과거스냅샷 보존 확인</td></tr><tr><td><strong>1. 셋업</strong></td><td><code>web/</code> Next.js 15 + anon 클라이언트 + 카카오 SDK 래퍼 + 레이아웃</td><td><code>npm run dev</code> 헤더·푸터·키없음 placeholder</td></tr><tr><td><strong>2. 홈</strong></td><td>KakaoMap + BuildingCard + FilterBar + 양방향 연동</td><td>260건물 지도·리스트·필터·임대료 노출</td></tr><tr><td><strong>3. 상세</strong></td><td>갤러리·개요·건축물대장·층별공실·특장점·<strong>추이차트</strong>·출처</td><td>케이스퀘어 실측 대조 + 추이 표시</td></tr><tr><td><strong>4. 검색/소개 + 배포</strong></td><td>/search·/about·반응형·SEO·Vercel 배포</td><td>비로그인 시크릿창에서 공개 URL 동작</td></tr></tbody></table></div>
+<hr>
+<h2 id="9-검증-end-to-end">9. 검증 (end-to-end)</h2>
+<ul><li><strong>Phase 0</strong>: <code>cli.py geocode</code> 후 <code>count(latitude not null) ≈ 260</code> / anon 키 SELECT 성공 + INSERT 거부 / 같은 건물 2개월 적재 후 <code>listing_snapshots</code> 2행·rent_terms 양쪽 보존.</li><li><strong>Phase 2</strong>: GBD 필터 → 강남 핀만, 카드↔핀 연동, 임대료 카드 노출.</li><li><strong>Phase 3</strong>: 케이스퀘어강남2 → B3/20F·연면적 21,930·18층 전용98.15/임대128.43·건폐율59.35% 대조 + 추이차트 월별 점 표시.</li><li><strong>Phase 4</strong>: Vercel URL 시크릿창(비로그인) 정상 = 공개 플랫폼 검증.</li></ul>
+<hr>
+<h2 id="10-미해결구현-중-확정">10. 미해결/구현 중 확정</h2>
+<ul><li>카카오 지오코딩 vs kk<em>real</em>estate geocoder 중 좌표 보강 1차 소스 (geocoder 우선, 실패분 카카오 폴백 검토).</li><li><code>v_buildings_summary</code> 일반뷰 vs materialized (성능 보고 결정).</li><li>추이 차트 라이브러리 (recharts 등 경량 우선).</li><li>면책 문구 법무 표현 (정보 제공 목적, 중개행위 아님).</li></ul>
+<div class="meta-foot">원본: <code>2026-06-18-lease-web-platform-design.md</code> · 자동 생성 2026-06-18 · md-to-html</div>
+</main>
+</div>
+
+</body></html>

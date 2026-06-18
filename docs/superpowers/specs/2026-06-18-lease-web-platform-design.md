@@ -24,6 +24,8 @@
 | 임대료 노출 | 카드 + 테이블 양쪽 |
 | 스택 | **Next.js 15 (App Router) + Supabase + Vercel** |
 | 추이 | 월별 스냅샷 누적 → 상세에 임대료 시계열 차트 |
+| UI 테마 | **라이트(흰 배경) 단일 테마**, 다크모드 없음 |
+| 아이콘 | **이모지 전면 금지**. 필요한 아이콘은 SVG 라이브러리(lucide-react)만 사용 |
 
 ---
 
@@ -48,7 +50,7 @@
 
 ---
 
-## 3. 데이터 모델 — 월별 추이 (★신규 핵심)
+## 3. 데이터 모델 — 월별 추이 (신규 핵심)
 
 ### 기존 스키마가 이미 지원하는 것 (검증 완료)
 `listing_snapshots` (0007):
@@ -59,13 +61,13 @@
 매월 재적재 시 과거 임대료를 보려면 **과거 스냅샷의 `rent_terms`/`floor_availabilities`가 삭제되지 않고 보존**되어야 한다.
 - `rent_terms`/`floor_availabilities`는 `listing_snapshot_id` FK로 특정 월 스냅샷에 묶인다.
 - 월별 적재 흐름: 새 달 = 새 `snapshot_month` 행 INSERT(새 id) → 그 id로 rent_terms 적재 → 이전 달 행은 `is_latest=false`로 강등되지만 **데이터는 그대로 남음**.
-- ⚠️ **적재 코드 점검 필요**: 현재 `supa_store.py`가 같은 (building,broker)에 대해 월이 바뀔 때 과거 rent_terms를 지우지 않는지(덮어쓰기 아님) 확인. 덮어쓰면 추이 불가 → 구현 Phase 0에서 검증·수정.
+- **적재 코드 점검 필요**: 현재 `supa_store.py`가 같은 (building,broker)에 대해 월이 바뀔 때 과거 rent_terms를 지우지 않는지(덮어쓰기 아님) 확인. 덮어쓰면 추이 불가 → 구현 Phase 0에서 검증·수정.
 
 ### 신규 추이 뷰 `v_rent_trend`
 ```
 building_id, broker, snapshot_month, scope_label,
 rent_per_pyeong, maintenance_per_pyeong, deposit_per_pyeong
-  ← listing_snapshots(전체, is_latest 무관) ⋈ rent_terms
+  ← listing_snapshots(전체, is_latest 무관) + rent_terms
   ← snapshot_month 오름차순
 ```
 상세 페이지에서 building_id로 필터 → 월별 평당 임대료 라인차트.
@@ -86,6 +88,15 @@ rent_per_pyeong, maintenance_per_pyeong, deposit_per_pyeong
 
 ---
 
+## 4-1. UI 디자인 시스템 (사용자 지정)
+
+- **라이트 테마 단일**: 흰 배경(`#ffffff`), 본문 텍스트 짙은 회색(`#1a1a1a` 계열), 다크모드 미지원.
+- **깔끔/미니멀**: 직방식 정보 밀도. 카드는 흰 배경 + 옅은 보더(`#e5e7eb`) + 미세 그림자. 강조색은 절제된 1색(예: 블루 계열) 포인트.
+- **이모지 전면 금지**: 본문/버튼/헤더 어디에도 이모지 사용 안 함. 아이콘이 필요하면 `lucide-react` SVG 컴포넌트만 사용.
+- Tailwind CSS 기반, 기본 폰트는 시스템 한글 폰트 스택(Pretendard 우선).
+
+---
+
 ## 5. 페이지 구성 (사이트맵)
 
 ```
@@ -96,21 +107,21 @@ rent_per_pyeong, maintenance_per_pyeong, deposit_per_pyeong
 공통: 헤더(검색바·권역탭) / 푸터(데이터 출처·갱신일·건수)
 ```
 
-### 화면 1. 홈 `/` — 지도+리스트 분할 (★메인)
+### 화면 1. 홈 `/` — 지도+리스트 분할 (메인)
 - **좌: 건물 카드 리스트** — 건물명 · 권역+주소 · 공실 개수 · **최저 평당 임대료** · 외관 썸네일. 정렬(임대료·면적·준공년·공실수). 무한스크롤.
 - **우: 카카오 지도** — 핀 + 클러스터, hover 미니카드, **핀↔카드 양방향 연동**, "이 지역 재검색".
 - **상단 필터** — 권역(GBD/CBD/YBD/BBD/ETC) · 전용/임대 면적범위 · 평당 임대료범위 · 즉시입주 · 준공년도. → `v_current_vacancies` 컬럼과 1:1.
 - 데이터: `v_buildings_summary` + `v_buildings_map`.
 
-### 화면 2. 건물 상세 `/building/[id]` (★핵심)
+### 화면 2. 건물 상세 `/building/[id]` (핵심)
 순서대로:
 1. **사진 갤러리** — building_images (외관→로비→평면도).
 2. **건물 개요** — 주소·권역·준공·규모(층/연면적)·전용률·주차·천정고·EV.
 3. **위치 미니맵** — 카카오 단일 핀 + 근접역.
 4. **건축물대장** — 건폐율·용적률·주용도·용도지역 등 8필드(있을 때만).
-5. **층별 공실 테이블** ★1순위 — 층 · 전용(평) · 임대(평) · 입주 · **평당 임대료/관리비**. 평↔㎡ 토글. Total행 제외.
-6. **특장점 섹션** ★ — `buildings.features_raw` 표시.
-7. **임대료 추이 차트** ★ — `v_rent_trend` 월별 라인차트.
+5. **층별 공실 테이블** 1순위 — 층 · 전용(평) · 임대(평) · 입주 · **평당 임대료/관리비**. 평↔㎡ 토글. Total행 제외.
+6. **특장점 섹션** — `buildings.features_raw` 표시.
+7. **임대료 추이 차트** — `v_rent_trend` 월별 라인차트.
 8. **데이터 출처** — "C&W·오스카 안내문(2026.06) + 건축물대장" 투명 표기.
 
 ### 화면 3~5
@@ -130,7 +141,7 @@ Lease Announcemen/
 │   ├── 0020_public_rls.sql      # anon SELECT-only 공개 정책
 │   ├── 0021_web_views.sql       # v_buildings_summary/map/detail
 │   └── 0022_rent_trend_view.sql # v_rent_trend
-└── web/                     # ★신규 Next.js 15
+└── web/                     # 신규 Next.js 15
     ├── app/
     │   ├── page.tsx                 # 홈 (지도+리스트)
     │   ├── building/[id]/page.tsx   # 상세
@@ -142,8 +153,8 @@ Lease Announcemen/
     │   ├── FilterBar.tsx
     │   ├── FloorTable.tsx           # 평↔㎡ 토글
     │   ├── PhotoGallery.tsx
-    │   ├── FeatureSection.tsx       # ★특장점
-    │   └── RentTrendChart.tsx       # ★월별 추이
+    │   ├── FeatureSection.tsx       # 특장점
+    │   └── RentTrendChart.tsx       # 월별 추이
     ├── lib/supabase.ts              # anon 클라이언트
     ├── lib/queries.ts               # 뷰 조회 함수
     ├── .env.local.example           # NEXT_PUBLIC_* + NEXT_PUBLIC_KAKAO_MAP_KEY
