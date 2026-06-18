@@ -153,24 +153,21 @@ def _insert_building(client, b: BuildingExtraction) -> str:
     payload = {k: v for k, v in payload.items() if v is not None}
 
     mkey = payload.get("match_key")
-    if mkey:
-        # match_key 충돌 시(동일 건물 재등장) 기존 행 반환 — 멱등.
-        result = client.table("buildings").upsert(
-            payload, on_conflict="match_key", ignore_duplicates=True,
-        ).execute()
+    try:
+        result = client.table("buildings").insert(payload).execute()
         if result.data:
             return result.data[0]["id"]
-        # ignore_duplicates로 data가 비면 기존 행 조회
-        existing = (
-            client.table("buildings").select("id").eq("match_key", mkey).limit(1).execute()
-        )
-        if existing.data:
-            return existing.data[0]["id"]
-
-    result = client.table("buildings").insert(payload).execute()
-    if not result.data:
-        raise RuntimeError(f"buildings 삽입 실패: {b.building_name}")
-    return result.data[0]["id"]
+    except Exception as exc:
+        # match_key 부분 유니크 인덱스 충돌(23505) → 동일 건물 동시/재삽입.
+        # 기존 행을 조회해 반환 (멱등).
+        if mkey and "23505" in str(exc):
+            existing = (
+                client.table("buildings").select("id").eq("match_key", mkey).limit(1).execute()
+            )
+            if existing.data:
+                return existing.data[0]["id"]
+        raise
+    raise RuntimeError(f"buildings 삽입 실패: {b.building_name}")
 
 
 def _register_merge_candidate(
