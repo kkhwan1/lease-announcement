@@ -17,7 +17,7 @@ function CardThumbnail({ path, name }: { path: string | null; name: string }) {
   const showImage = path && !failed;
 
   return (
-    <div className="mb-3 flex h-28 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-surface-soft to-primary-soft">
+    <div className="flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-surface-soft to-primary-soft">
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -54,7 +54,7 @@ export function BuildingCard({ building, selected, onHover }: BuildingCardProps)
     <Link
       href={`/building/${building.building_id}`}
       className={[
-        "block rounded-xxxl border bg-canvas p-4 transition-shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+        "flex items-center gap-3 rounded-xxxl border bg-canvas p-4 transition-shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
         selected
           ? "border-primary shadow-elev1"
           : "border-hairline-soft hover:border-primary hover:shadow-elev1",
@@ -65,6 +65,8 @@ export function BuildingCard({ building, selected, onHover }: BuildingCardProps)
       {/* 썸네일 — thumbnail_path 있으면 실제 외관 사진, 없으면 아이콘 */}
       <CardThumbnail path={building.thumbnail_path} name={building.name} />
 
+      {/* 오른쪽 텍스트 칼럼 — min-w-0로 line-clamp 말줄임 정상 동작 */}
+      <div className="min-w-0 flex-1">
       {/* 건물명 + 권역 배지 */}
       <div className="mb-1 flex items-start justify-between gap-2">
         <span className="line-clamp-1 text-body-md font-bold text-ink-deep">
@@ -96,6 +98,7 @@ export function BuildingCard({ building, selected, onHover }: BuildingCardProps)
         >
           {rentDisplay}
         </span>
+      </div>
       </div>
     </Link>
   );

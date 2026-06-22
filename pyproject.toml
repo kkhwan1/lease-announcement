@@ -10,6 +10,9 @@ dependencies = [
     "rapidfuzz>=3.9",     # 건물명 fuzzy 매칭 (Entity Resolution)
     "supabase>=2.6",      # Supabase 적재
     "python-dotenv>=1.0", # .env 로드
+    "requests>=2.31",        # 뉴스 본문 스크래핑
+    "beautifulsoup4>=4.12",  # HTML 파싱
+    "lxml>=6.1",             # bs4 파서
 ]
 
 [project.optional-dependencies]

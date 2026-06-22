@@ -58,3 +58,35 @@ export function formatPercent(v: string | number | null): string {
   if (n === null) return "-";
   return `${Math.round(n * 100) / 100}%`;
 }
+
+/** ISO 시각 → 한국어 상대 시간. "방금/N분 전/N시간 전/N일 전", 7일 초과 시 날짜 표시. */
+export function formatRelativeTime(iso: string | null): string {
+  if (!iso) return "";
+  const published = new Date(iso);
+  if (isNaN(published.getTime())) return "";
+  const diffMs = Date.now() - published.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return "방금";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) {
+    return new Intl.RelativeTimeFormat("ko", { numeric: "always" }).format(
+      -diffMin,
+      "minute",
+    );
+  }
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) {
+    return new Intl.RelativeTimeFormat("ko", { numeric: "always" }).format(
+      -diffHour,
+      "hour",
+    );
+  }
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay <= 7) {
+    return new Intl.RelativeTimeFormat("ko", { numeric: "always" }).format(
+      -diffDay,
+      "day",
+    );
+  }
+  return published.toLocaleDateString("ko-KR");
+}

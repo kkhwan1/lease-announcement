@@ -687,3 +687,87 @@ def _store_single_building(
 
     # ER 상태를 호출자(store_document)에 반환 — 카운터 집계용
     return status
+
+
+# ---------------------------------------------------------------------------
+# 뉴스 적재
+# ---------------------------------------------------------------------------
+
+def store_news(rows: list[dict]) -> dict:
+    """news_articles 테이블에 rows를 멱등 upsert한다.
+
+    link_hash를 충돌 키로 사용. ignore_duplicates=False(merge)로 실행하므로
+    기존 행의 body/thumbnail_url 등 갱신 가능(NULL → 값 채움 포함).
+
+    Args:
+        rows: collect_all()이 반환한 row dict 목록.
+              news_articles 컬럼(sector/title/description/body/press/
+              thumbnail_url/original_link/naver_link/link_hash/published_at)에 맞춰야 함.
+
+    Returns:
+        {"total": int, "inserted": int, "skipped": int}
+        신규/기존 구분은 upsert 전 hash 조회로 계산한 근사값.
+    """
+    if not rows:
+        return {"total": 0, "inserted": 0, "skipped": 0}
+
+    client = get_client()
+
+    # in_() 쿼리 최대 길이 제한 — Supabase PostgREST는 URL 길이 초과 시 400.
+    # 100개씩 배치로 쪼개 기존 hash 조회.
+    _BATCH = 100
+    hashes = [r["link_hash"] for r in rows]
+    existing_set: set[str] = set()
+    for i in range(0, len(hashes), _BATCH):
+        chunk = hashes[i : i + _BATCH]
+        resp = (
+            client.table("news_articles")
+            .select("link_hash")
+            .in_("link_hash", chunk)
+            .execute()
+        )
+        existing_set.update(r["link_hash"] for r in (resp.data or []))
+
+    new_count = sum(1 for r in rows if r["link_hash"] not in existing_set)
+    skipped = len(rows) - new_count
+
+    # ignore_duplicates=False(merge): 기존 행도 body/thumbnail_url 등 갱신됨.
+    # NULL이었던 컬럼을 스크래핑 값으로 채우는 재적재에 필수.
+    for i in range(0, len(rows), _BATCH):
+        chunk = rows[i : i + _BATCH]
+        client.table("news_articles").upsert(
+            chunk,
+            on_conflict="link_hash",
+            ignore_duplicates=False,
+        ).execute()
+
+    logger.info(
+        "news_articles upsert(merge): 총 %d건 (신규 약 %d건 / 기존 갱신 약 %d건)",
+        len(rows), new_count, skipped,
+    )
+    return {"total": len(rows), "inserted": new_count, "skipped": skipped}
+
+
+def purge_old_news(days: int = 14) -> int:
+    """수집된 지 days일이 지난 뉴스를 삭제한다(TTL 청소).
+
+    기준 컬럼은 fetched_at(수집 시각). published_at이 아닌 이유는
+    발행일이 NULL인 기사도 일관되게 정리하기 위함.
+    수집 cron이 매 실행 끝에 호출하거나, Supabase pg_cron으로 대체 가능.
+
+    Returns:
+        삭제된 행 수.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    client = get_client()
+    resp = (
+        client.table("news_articles")
+        .delete()
+        .lt("fetched_at", cutoff)
+        .execute()
+    )
+    deleted = len(resp.data or [])
+    logger.info("news_articles TTL 청소: %d일 경과 %d건 삭제 (cutoff=%s)", days, deleted, cutoff)
+    return deleted

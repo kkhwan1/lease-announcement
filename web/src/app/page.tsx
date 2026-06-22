@@ -2,6 +2,7 @@
 
 // 홈 = 지도+리스트 분할 (메인 탐색). 좌: 필터+카드 리스트 / 우: 카카오 지도.
 import { useEffect, useMemo, useState } from "react";
+import { Plus, Minus } from "lucide-react";
 import FilterBar from "@/components/FilterBar";
 import { BuildingList } from "@/components/BuildingList";
 import KakaoMap from "@/components/KakaoMap";
@@ -59,13 +60,13 @@ export default function HomePage() {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
-      <div className="border-b border-border bg-background px-4 py-3">
+      <div className="border-b border-hairline-soft bg-canvas px-4 py-3">
         <FilterBar value={filter} onChange={setFilter} />
       </div>
       <div className="flex flex-1 overflow-hidden">
         {/* 좌: 리스트 */}
-        <div className="flex w-full flex-col border-r border-border md:w-[440px] lg:w-[520px]">
-          <div className="border-b border-border px-4 py-2 text-sm text-muted">
+        <div className="flex w-full flex-col border-r border-hairline-soft md:w-[440px] lg:w-[520px]">
+          <div className="border-b border-hairline-soft px-4 py-2 text-body-sm text-steel">
             {loading
               ? "불러오는 중..."
               : error
@@ -81,12 +82,37 @@ export default function HomePage() {
           </div>
         </div>
         {/* 우: 지도 (모바일에서는 숨김) */}
-        <div className="hidden flex-1 md:block">
+        <div className="relative hidden flex-1 md:block">
           <KakaoMap
             pins={visiblePins}
             selectedId={selectedId}
             onSelectPin={setSelectedId}
           />
+          {/* 지도 위 매물 수 chip */}
+          <div className="absolute left-4 top-4 z-10 rounded-full bg-canvas/95 px-4 py-2 text-body-sm font-bold text-ink-deep shadow-elev2">
+            매물 {buildings.length}건
+          </div>
+          {/* 지도 줌 컨트롤 (시각 chrome — TODO: wire zoom via KakaoMap ref) */}
+          <div className="absolute bottom-6 right-6 z-10 flex flex-col gap-2">
+            <button
+              aria-label="지도 확대"
+              onClick={() => {
+                // TODO: wire zoom via KakaoMap ref
+              }}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-canvas text-ink shadow-elev2"
+            >
+              <Plus size={18} strokeWidth={2} aria-hidden />
+            </button>
+            <button
+              aria-label="지도 축소"
+              onClick={() => {
+                // TODO: wire zoom via KakaoMap ref
+              }}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-canvas text-ink shadow-elev2"
+            >
+              <Minus size={18} strokeWidth={2} aria-hidden />
+            </button>
+          </div>
         </div>
       </div>
     </div>

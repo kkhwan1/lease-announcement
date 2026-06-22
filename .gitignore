@@ -8,3 +8,8 @@ Raw/*.pdf
 docs/_html/
 .playwright-mcp/
 phase2-home.png
+
+# 대용량 원본 데이터셋 (GitHub 100MB 한도 초과, 웹 배포 불필요)
+data/*.csv
+Raw/datasets/*.csv
+*.csv

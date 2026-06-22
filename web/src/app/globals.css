@@ -1,22 +1,120 @@
 @import "tailwindcss";
 
-/* 라이트 단일 테마 (다크모드 미지원, 사용자 지정). */
+/* =========================================================================
+   Meta 스타일 디자인 토큰 (DESIGN.md 기반, 라이트 단일 테마 — 다크모드 미지원)
+   - 코발트(#0064E0)를 단일 primary accent로 사용 (임대매물 맥락)
+   - 커머스 전용 개념(장바구니/buy-now 흑백 CTA 분리)은 제외
+   ========================================================================= */
+
 :root {
-  --background: #ffffff;
-  --foreground: #1a1a1a;
-  --muted: #6b7280;
-  --border: #e5e7eb;
-  --accent: #2563eb;
-  --surface: #f9fafb;
+  /* Brand & Accent */
+  --primary: #0064e0;            /* Meta 코발트 — 단일 primary accent */
+  --primary-deep: #0143b5;       /* pressed / active-link / 선택 마커 deep */
+  --primary-soft: rgba(0, 100, 224, 0.12); /* 콜아웃 틴트 */
+  --ink-button: #141619;         /* 흑색 pill primary CTA */
+  --on-ink-button: #ffffff;
+
+  /* Text */
+  --ink-deep: #1c2b33;           /* 헤드라인, 다크 promo 표면 */
+  --ink: #344854;                /* 본문 / 보조 헤드라인 */
+  --charcoal: #465a65;           /* 3차 본문, 버튼 라벨 */
+  --slate: #5b7382;              /* 섹션 헤더 카피 */
+  --steel: #7a8c99;              /* 캡션, 푸터 링크 */
+  --stone: #a8b4bd;              /* 비활성 / 약화 라벨 */
+
+  /* Surface */
+  --canvas: #ffffff;             /* 페이지 배경, 기본 카드 표면 */
+  --surface-soft: #f1f4f8;       /* 썸네일 bg, search-pill rest */
+  --hairline: #d9dee3;           /* 1px 입력 테두리 */
+  --hairline-soft: #e9edf1;      /* 카드/푸터 디바이더 */
+
+  /* Semantic */
+  --success: #16a34a;
+  --attention: #f59e0b;
+  --warning: #ffc107;            /* promo yellow; 텍스트는 ink-deep */
+  --critical: #dc2626;
+  --critical-strong: #b91c1c;
+
+  /* Named spacing (테마 키 아님 — arbitrary value로 소비) */
+  --space-section-sm: 48px;
+  --space-section: 64px;
+  --space-section-lg: 80px;
+  --space-hero: 120px;
+
+  /* Elevation */
+  --elev-1: 1px 1px 0 0 rgba(0, 0, 0, 0.2);      /* pill-tab 활성 인디케이터 */
+  --elev-2: 0 1px 4px 0 rgba(20, 22, 26, 0.3);   /* sticky/floating 패널 */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-border: var(--border);
-  --color-accent: var(--accent);
-  --color-surface: var(--surface);
+  /* Meta 색상 토큰 → bg-/text-/border- 유틸 */
+  --color-primary: var(--primary);
+  --color-primary-deep: var(--primary-deep);
+  --color-primary-soft: var(--primary-soft);
+  --color-ink-button: var(--ink-button);
+  --color-on-ink-button: var(--on-ink-button);
+  --color-ink-deep: var(--ink-deep);
+  --color-ink: var(--ink);
+  --color-charcoal: var(--charcoal);
+  --color-slate: var(--slate);
+  --color-steel: var(--steel);
+  --color-stone: var(--stone);
+  --color-canvas: var(--canvas);
+  --color-surface-soft: var(--surface-soft);
+  --color-hairline: var(--hairline);
+  --color-hairline-soft: var(--hairline-soft);
+  --color-success: var(--success);
+  --color-attention: var(--attention);
+  --color-warning: var(--warning);
+  --color-critical: var(--critical);
+  --color-critical-strong: var(--critical-strong);
+
+  /* Radius → rounded-* 유틸 */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 16px;
+  --radius-xxl: 24px;
+  --radius-xxxl: 32px;
+  --radius-feature: 40px;
+  --radius-full: 100px;
+
+  /* Typography → text-* 유틸 (DESIGN.md 표 그대로) */
+  --text-hero-display: 64px;
+  --text-hero-display--line-height: 1.16;
+  --text-hero-display--font-weight: 500;
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 1.17;
+  --text-display-lg--font-weight: 500;
+  --text-heading-lg: 36px;
+  --text-heading-lg--line-height: 1.28;
+  --text-heading-lg--font-weight: 500;
+  --text-heading-md: 28px;
+  --text-heading-md--line-height: 1.21;
+  --text-heading-md--font-weight: 300;
+  --text-heading-sm: 24px;
+  --text-heading-sm--line-height: 1.25;
+  --text-heading-sm--font-weight: 500;
+  --text-subtitle-lg: 18px;
+  --text-subtitle-lg--line-height: 1.44;
+  --text-subtitle-lg--font-weight: 700;
+  --text-subtitle-md: 18px;
+  --text-subtitle-md--line-height: 1.44;
+  --text-subtitle-md--font-weight: 400;
+  --text-body-md: 16px;
+  --text-body-md--line-height: 1.5;
+  --text-body-md--letter-spacing: -0.16px;
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 1.43;
+  --text-body-sm--letter-spacing: -0.14px;
+  --text-caption: 12px;
+  --text-caption--line-height: 1.33;
+
+  /* Elevation → shadow-* 유틸 */
+  --shadow-elev1: var(--elev-1);
+  --shadow-elev2: var(--elev-2);
+
   --font-sans: var(--font-pretendard);
 }
 
@@ -25,10 +123,61 @@ html {
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--canvas);
+  color: var(--ink-deep);
   font-family:
     "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
     "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* =========================================================================
+   지도 커스텀 알약 마커 (KakaoMap CustomOverlay 전용)
+   - Tailwind purge 위험 회피를 위해 명시 정의 (런타임 주입 DOM이므로)
+   ========================================================================= */
+@layer components {
+  .map-pill {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    background: var(--canvas);
+    border: 1px solid var(--hairline);
+    box-shadow: var(--elev-2);
+    color: var(--ink-deep);
+    font-size: 12px;
+    line-height: 1.33;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transform: translateY(-6px);
+    transition: transform 150ms ease-out, background 150ms ease-out;
+  }
+
+  .map-pill::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -5px;
+    width: 0;
+    height: 0;
+    transform: translateX(-50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--canvas);
+  }
+
+  .map-pill--selected {
+    background: var(--primary);
+    border-color: var(--primary-deep);
+    color: var(--on-ink-button);
+    transform: translateY(-6px) scale(1.08);
+    z-index: 10;
+  }
+
+  .map-pill--selected::after {
+    border-top-color: var(--primary);
+  }
 }

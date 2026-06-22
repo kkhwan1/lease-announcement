@@ -1,0 +1,44 @@
+# 부동산 뉴스 자동 수집 (GitHub Actions cron)
+# === 활성화 조건 (서버/배포 시) ===
+#   1. 이 레포를 GitHub에 푸시
+#   2. Settings > Secrets and variables > Actions 에 등록:
+#        SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET
+#   3. (선택) Actions 탭에서 "Run workflow"로 수동 1회 실행해 검증
+# PC가 꺼져 있어도 클라우드에서 동작. 무료 러너 사용.
+#
+# ⚠️ 현재는 .github/workflows에 파일만 둔 상태 — GitHub에 푸시하기 전까진 동작 안 함(로컬 보관).
+
+name: collect-news
+
+on:
+  schedule:
+    # 매시 7분 (UTC). 정각 피크 회피 + 한국시간과 무관하게 매시간.
+    - cron: "7 * * * *"
+  workflow_dispatch: {} # Actions 탭에서 수동 실행 허용
+
+# 동시 실행 방지(이전 수집이 안 끝났으면 새로 시작 안 함)
+concurrency:
+  group: collect-news
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install -e .
+
+      - name: Collect news (+ 14-day TTL purge)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
+        run: python cli.py news --pages 1 --purge-days 14

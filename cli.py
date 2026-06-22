@@ -383,6 +383,265 @@ def cmd_geocode(limit: int | None = None, dry_run: bool = False) -> int:
     return 0
 
 
+def cmd_commercial(limit: int | None = None, radius: int = 300,
+                   dry_run: bool = False) -> int:
+    """buildings의 좌표 보유 건물에 발달상권 정보를 보강한다.
+
+    소상공인 상권정보 API로 좌표 반경 점포를 집계해
+    building_commercial_areas 테이블에 upsert.
+    """
+    import os
+    from app.commercial import fetch_commercial
+    from app.supa_store import get_client
+
+    # 쓰기 작업이므로 service_role 키 필수 (anon이면 RLS로 upsert 조용히 실패)
+    if not dry_run and not (
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or os.environ.get("SUPABASE_SERVICE_KEY")
+    ):
+        print("오류: commercial은 쓰기 작업입니다. SUPABASE_SERVICE_ROLE_KEY가 필요합니다.")
+        return 1
+
+    client = get_client()
+
+    # 좌표가 모두 있는 건물만 대상 (둘 다 not null)
+    q = (
+        client.table("buildings")
+        .select("id, name, latitude, longitude")
+        .not_.is_("latitude", "null")
+        .not_.is_("longitude", "null")
+    )
+    if limit:
+        q = q.limit(limit)
+    rows = q.execute().data or []
+    print(f"좌표 보유 건물: {len(rows)}건 (반경 {radius}m)")
+
+    ok = empty = fail = 0
+    for r in rows:
+        try:
+            s = fetch_commercial(float(r["latitude"]), float(r["longitude"]), radius)
+        except Exception as exc:
+            fail += 1
+            print(f"  --  {r['name']}: 조회 실패 — {type(exc).__name__}: {exc}")
+            continue
+        if not s:
+            empty += 1
+            print(f"  ..  {r['name']}: 반경 내 점포 없음")
+            continue
+        ok += 1
+        print(
+            f"  OK  {r['name']}: {s.area_name or '-'} "
+            f"총 {s.store_count}개 (도소매 {s.retail_count}/서비스 {s.service_count}/외식 {s.food_count})"
+        )
+        if not dry_run:
+            client.table("building_commercial_areas").upsert({
+                "building_id": r["id"],
+                "area_name": s.area_name,
+                "store_count": s.store_count,
+                "retail_count": s.retail_count,
+                "service_count": s.service_count,
+                "food_count": s.food_count,
+                "radius_m": s.radius_m,
+                "base_period": s.base_period,
+                "top_industries": s.top_industries,
+                "dong_name": s.dong_name,
+                "resident_total": s.resident_total,
+                "resident_male": s.resident_male,
+                "resident_female": s.resident_female,
+                "household_count": s.household_count,
+                "resident_period": s.resident_period,
+                "ldong_cd": s.ldong_cd,
+            }).execute()
+    print(
+        f"\n완료: 적재 {ok} / 점포없음 {empty} / 실패 {fail}"
+        + (" (dry-run)" if dry_run else "")
+    )
+    return 0
+
+
+def cmd_subway(xlsx_path: str | None = None, limit: int | None = None,
+               dry_run: bool = False) -> int:
+    """지하철역 마스터 적재 + 매물별 최근접역 보강.
+
+    xlsx_path 지정 시: 레일포털 전국 도시철도역 XLSX를 subway_stations에 적재(upsert).
+    그 후(또는 xlsx 미지정 시): 좌표 보유 building에 최근접역을 계산해
+    building_commercial_areas.nearest_station* 컬럼에 반영.
+    """
+    import os
+    from app.subway import nearest_station, parse_stations_xlsx
+    from app.supa_store import get_client
+
+    if not dry_run and not (
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or os.environ.get("SUPABASE_SERVICE_KEY")
+    ):
+        print("오류: subway는 쓰기 작업입니다. SUPABASE_SERVICE_ROLE_KEY가 필요합니다.")
+        return 1
+
+    client = get_client()
+
+    # (1) XLSX 마스터 적재
+    if xlsx_path:
+        stations = parse_stations_xlsx(xlsx_path)
+        print(f"XLSX 파싱: {len(stations)}개역 (좌표 보유)")
+        if not dry_run:
+            # (name, line_name) 중복 제거 — upsert 키 충돌 방지(같은 역 중복 행 존재).
+            seen: dict[tuple, dict] = {}
+            for s in stations:
+                key = (s.name, s.line_name or "")
+                seen[key] = {
+                    "station_code": s.station_code,
+                    "name": s.name,
+                    "line_name": s.line_name or "",
+                    "line_code": s.line_code,
+                    "latitude": s.latitude,
+                    "longitude": s.longitude,
+                    "operator": s.operator,
+                    "road_address": s.road_address,
+                    "is_transfer": s.is_transfer,
+                    "base_date": s.base_date,
+                }
+            rows = list(seen.values())
+            if len(rows) != len(stations):
+                print(f"  (중복 제거: {len(stations)} → {len(rows)}건)")
+            # 1000건 배치 upsert (name+line_name 유니크)
+            for i in range(0, len(rows), 500):
+                client.table("subway_stations").upsert(
+                    rows[i:i + 500], on_conflict="name,line_name"
+                ).execute()
+            print(f"  → subway_stations 적재 완료 ({len(rows)}건)")
+
+    # (2) 최근접역 보강 — 마스터를 메모리로 로드(1000행 제한 회피: 페이지네이션)
+    master: list[dict] = []
+    page_size = 1000
+    offset = 0
+    while True:
+        chunk = (
+            client.table("subway_stations")
+            .select("name, line_name, latitude, longitude")
+            .range(offset, offset + page_size - 1)
+            .execute().data or []
+        )
+        master.extend(chunk)
+        if len(chunk) < page_size:
+            break
+        offset += page_size
+    if not master:
+        print("subway_stations가 비어있습니다. --xlsx로 먼저 마스터를 적재하세요.")
+        return 1
+    print(f"역 마스터: {len(master)}개")
+
+    q = (
+        client.table("buildings")
+        .select("id, name, latitude, longitude")
+        .not_.is_("latitude", "null")
+        .not_.is_("longitude", "null")
+    )
+    if limit:
+        q = q.limit(limit)
+    blds = q.execute().data or []
+    print(f"좌표 보유 건물: {len(blds)}건")
+
+    ok = 0
+    for b in blds:
+        res = nearest_station(float(b["latitude"]), float(b["longitude"]), master)
+        if not res:
+            continue
+        st, dist = res
+        ok += 1
+        print(f"  OK  {b['name']}: {st['name']}({st.get('line_name') or '-'}) {dist}m")
+        if not dry_run:
+            # building_commercial_areas에 최근접역만 갱신(없으면 생성)
+            client.table("building_commercial_areas").upsert({
+                "building_id": b["id"],
+                "nearest_station": st["name"],
+                "nearest_station_line": st.get("line_name"),
+                "nearest_station_distance_m": dist,
+            }).execute()
+    print(f"\n완료: 최근접역 보강 {ok}/{len(blds)}"
+          + (" (dry-run)" if dry_run else ""))
+    return 0
+
+
+def cmd_news(pages: int = 1, dry_run: bool = False, purge_days: int = 14) -> int:
+    """상업용 부동산 뉴스를 수집해 Supabase news_articles에 적재한다.
+
+    통계 출력: sector × subcategory 교차표 + 섹터별 샘플 제목.
+    적재 후 purge_days일이 지난 오래된 뉴스를 삭제한다(0이면 청소 생략).
+    """
+    import os
+    from collections import defaultdict
+    from app.news_fetch import collect_all
+    from app.supa_store import store_news, purge_old_news
+
+    # 쓰기 작업이므로 service_role 키 필수 (dry_run 제외)
+    if not dry_run and not (
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or os.environ.get("SUPABASE_SERVICE_KEY")
+    ):
+        print("오류: news 적재는 쓰기 작업입니다. SUPABASE_SERVICE_ROLE_KEY가 필요합니다.")
+        return 1
+
+    # dry-run은 분류 품질 확인 목적이므로 스크래핑 생략
+    print(f"뉴스 수집 중... (pages={pages}, dry_run={dry_run})")
+    rows = collect_all(pages=pages, scrape_body=not dry_run)
+
+    if not rows:
+        print("수집된 기사 없음 — NAVER_CLIENT_ID/SECRET 설정 또는 검색어 확인 필요")
+        return 1
+
+    # sector × subcategory 교차 집계
+    SECTORS = ["datacenter", "hotel", "logistics", "office", "retail"]
+    SUBS = ["deal", "general", "landlord", "tenant"]
+
+    cross: dict[str, dict[str, int]] = {s: {sub: 0 for sub in SUBS} for s in SECTORS}
+    sector_samples: dict[str, list] = defaultdict(list)
+    for r in rows:
+        sec = r["sector"]
+        sub = r.get("subcategory", "general") or "general"
+        if sec in cross and sub in cross[sec]:
+            cross[sec][sub] += 1
+        if len(sector_samples[sec]) < 2:
+            sector_samples[sec].append(r["title"])
+
+    total = len(rows)
+    print(f"\n수집 결과: 총 {total}건")
+    print()
+
+    # 교차표 헤더
+    col_w = 8
+    header = f"{'sector':<12s}" + "".join(f"{sub:>{col_w}}" for sub in SUBS) + f"{'합계':>{col_w}}"
+    print(header)
+    print("-" * len(header))
+    for sec in SECTORS:
+        row_total = sum(cross[sec].values())
+        cols = "".join(f"{cross[sec][sub]:>{col_w}}" for sub in SUBS)
+        print(f"{sec:<12s}{cols}{row_total:>{col_w}}")
+        for title in sector_samples[sec]:
+            print(f"  · {title[:62]}")
+    print("-" * len(header))
+    col_totals = "".join(f"{sum(cross[s][sub] for s in SECTORS):>{col_w}}" for sub in SUBS)
+    print(f"{'합계':<12s}{col_totals}{total:>{col_w}}")
+
+    if dry_run:
+        print("\n(dry-run) DB 적재 생략")
+        return 0
+
+    result = store_news(rows)
+    print(
+        f"\n적재 완료: 총 {result['total']}건 "
+        f"/ 신규 {result['inserted']}건 "
+        f"/ 스킵(중복) {result['skipped']}건"
+    )
+
+    # TTL 청소 — 수집 시각 기준 purge_days일 경과 뉴스 삭제 (0이면 생략)
+    if purge_days > 0:
+        deleted = purge_old_news(days=purge_days)
+        print(f"오래된 뉴스 정리: {purge_days}일 경과 {deleted}건 삭제")
+
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # 진입점
 # ---------------------------------------------------------------------------
@@ -418,6 +677,28 @@ def main() -> int:
     p_geo.add_argument("--limit", type=int, default=None, help="처리 건수 제한")
     p_geo.add_argument("--dry-run", action="store_true", help="DB 미반영, 결과만 출력")
 
+    # commercial 커맨드: 좌표 반경 발달상권 정보 보강
+    p_com = sub.add_parser("commercial", help="발달상권 정보 보강 (좌표→반경 점포 집계)")
+    p_com.add_argument("--limit", type=int, default=None, help="처리 건수 제한")
+    p_com.add_argument("--radius", type=int, default=300, help="집계 반경(m, 기본 300)")
+    p_com.add_argument("--dry-run", action="store_true", help="DB 미반영, 결과만 출력")
+
+    # subway 커맨드: 지하철역 마스터 적재 + 매물 최근접역 보강
+    p_sub = sub.add_parser("subway", help="지하철역 좌표 마스터 적재 + 매물 최근접역 보강")
+    p_sub.add_argument("--xlsx", default=None,
+                       help="레일포털 전국 도시철도역 XLSX 경로 (지정 시 마스터 적재)")
+    p_sub.add_argument("--limit", type=int, default=None, help="처리 건수 제한")
+    p_sub.add_argument("--dry-run", action="store_true", help="DB 미반영, 결과만 출력")
+
+    # news 커맨드: 네이버 뉴스 수집 → Supabase 적재
+    p_news = sub.add_parser("news", help="상업용 부동산 뉴스 수집 → Supabase 적재")
+    p_news.add_argument("--pages", type=int, default=1,
+                        help="검색어당 수집 페이지 수 (1페이지=100건, 기본 1)")
+    p_news.add_argument("--dry-run", action="store_true",
+                        help="DB 미반영, 섹터별 카운트·샘플 제목만 출력")
+    p_news.add_argument("--purge-days", type=int, default=14,
+                        help="수집 후 N일 경과 뉴스 삭제 (기본 14, 0이면 청소 생략)")
+
     args = parser.parse_args()
 
     if args.cmd == "ingest":
@@ -429,6 +710,14 @@ def main() -> int:
                         with_images=not args.no_images)
     elif args.cmd == "geocode":
         return cmd_geocode(limit=args.limit, dry_run=args.dry_run)
+    elif args.cmd == "commercial":
+        return cmd_commercial(limit=args.limit, radius=args.radius,
+                              dry_run=args.dry_run)
+    elif args.cmd == "subway":
+        return cmd_subway(xlsx_path=args.xlsx, limit=args.limit,
+                          dry_run=args.dry_run)
+    elif args.cmd == "news":
+        return cmd_news(pages=args.pages, dry_run=args.dry_run, purge_days=args.purge_days)
 
     return 0
 

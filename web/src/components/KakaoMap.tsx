@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BuildingMapPin } from "@/lib/types";
+import { formatRentManwon } from "@/lib/format";
 
 // 카카오 SDK 타입: SDK 공식 타입 패키지 없음, any로 최소 선언
 declare global {
@@ -31,12 +32,38 @@ const SELECTED_MARKER_SIZE = { width: 32, height: 46 };
 export default function KakaoMap({ pins, selectedId, onSelectPin }: KakaoMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
-  const markersRef = useRef<{ id: string; marker: any }[]>([]);
+  // pin 데이터를 marker와 함께 보관하여 selectedId 이펙트에서 rent/vacancy 조회 가능
+  const markersRef = useRef<{ id: string; marker: any; pin: BuildingMapPin }[]>([]);
   const clustererRef = useRef<any>(null);
+  const overlaysRef = useRef<any[]>([]);
   const isInitializedRef = useRef(false);
   const [loadFailed, setLoadFailed] = useState(false);
 
   const apiKey = process.env.NEXT_PUBLIC_KAKAO_JS_KEY;
+
+  // 선택된 핀의 CustomOverlay pill 제거
+  function clearSelectedOverlay() {
+    overlaysRef.current.forEach((overlay) => overlay.setMap(null));
+    overlaysRef.current = [];
+  }
+
+  // 선택된 핀 위에 표시할 pill DOM 엘리먼트 생성
+  function buildPillElement(pin: BuildingMapPin, selected: boolean): HTMLElement {
+    const el = document.createElement("div");
+    el.className = selected ? "map-pill map-pill--selected" : "map-pill";
+
+    if (pin.min_rent_per_pyeong != null) {
+      el.textContent = formatRentManwon(pin.min_rent_per_pyeong) + "/평";
+    } else {
+      el.textContent = `공실 ${pin.vacancy_count}`;
+    }
+
+    el.addEventListener("click", () => {
+      onSelectPin?.(pin.building_id);
+    });
+
+    return el;
+  }
 
   // 마커 이미지 생성 헬퍼
   function createMarkerImage(kakao: any, selected: boolean) {
@@ -49,8 +76,9 @@ export default function KakaoMap({ pins, selectedId, onSelectPin }: KakaoMapProp
     );
   }
 
-  // 마커 및 클러스터 전체 정리
+  // 마커 및 클러스터 전체 정리 (overlay도 함께 정리)
   function clearMarkers() {
+    clearSelectedOverlay();
     if (clustererRef.current) {
       clustererRef.current.clear();
     }
@@ -76,7 +104,8 @@ export default function KakaoMap({ pins, selectedId, onSelectPin }: KakaoMapProp
         onSelectPin?.(pin.building_id);
       });
 
-      return { id: pin.building_id, marker };
+      // pin을 함께 저장하여 selectedId 이펙트에서 rent/vacancy 조회 가능
+      return { id: pin.building_id, marker, pin };
     });
 
     markersRef.current = newMarkers;
@@ -153,7 +182,7 @@ export default function KakaoMap({ pins, selectedId, onSelectPin }: KakaoMapProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pins]);
 
-  // selectedId 변경 시 강조 + panTo
+  // selectedId 변경 시 강조 + panTo + pill overlay
   useEffect(() => {
     if (!isInitializedRef.current || !mapRef.current || !window.kakao) return;
 
@@ -164,11 +193,24 @@ export default function KakaoMap({ pins, selectedId, onSelectPin }: KakaoMapProp
       marker.setImage(createMarkerImage(kakao, id === selectedId));
     });
 
-    // panTo
+    // 기존 overlay 제거
+    clearSelectedOverlay();
+
+    // panTo + 선택된 핀 위에 pill overlay 추가
     if (selectedId) {
       const target = markersRef.current.find((m) => m.id === selectedId);
       if (target) {
         mapRef.current.panTo(target.marker.getPosition());
+
+        const overlay = new kakao.maps.CustomOverlay({
+          position: target.marker.getPosition(),
+          content: buildPillElement(target.pin, true),
+          yAnchor: 1.0,
+          clickable: true,
+          zIndex: 10,
+        });
+        overlay.setMap(mapRef.current);
+        overlaysRef.current.push(overlay);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -177,8 +219,8 @@ export default function KakaoMap({ pins, selectedId, onSelectPin }: KakaoMapProp
   // 키 없음 또는 로드 실패 시 placeholder (앱은 정상 동작, 리스트는 그대로)
   if (!apiKey || loadFailed) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-surface p-6 text-center">
-        <p className="text-sm text-muted">
+      <div className="flex h-full w-full items-center justify-center bg-surface-soft rounded-xxxl p-6 text-center">
+        <p className="text-body-sm text-steel">
           {!apiKey
             ? "카카오맵 키를 설정하면 지도가 표시됩니다."
             : "지도를 불러오지 못했습니다. 카카오 개발자 콘솔에서 사이트 도메인(http://localhost:3000) 등록을 확인해 주세요."}

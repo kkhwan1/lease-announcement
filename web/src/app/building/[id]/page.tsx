@@ -7,10 +7,12 @@ import {
   fetchFloorVacancies,
   fetchRentTrend,
   fetchBuildingImages,
+  fetchCommercialArea,
 } from "@/lib/queries";
 import { PhotoGallery } from "@/components/PhotoGallery";
 import { BuildingOverview } from "@/components/BuildingOverview";
 import { BuildingLocationMap } from "@/components/BuildingLocationMap";
+import { CommercialAreaSection } from "@/components/CommercialAreaSection";
 import { FloorTable } from "@/components/FloorTable";
 import { RentTrendChart } from "@/components/RentTrendChart";
 import { Button } from "@/components/ui/Button";
@@ -37,12 +39,13 @@ export default async function BuildingDetailPage({
 }) {
   const { id } = await params;
 
-  // 4개 쿼리 완전 병렬화 — detail 지연이 나머지 조회를 막지 않도록.
-  const [detail, floors, trend, images] = await Promise.all([
+  // 5개 쿼리 완전 병렬화 — detail 지연이 나머지 조회를 막지 않도록.
+  const [detail, floors, trend, images, commercial] = await Promise.all([
     fetchBuildingDetail(id),
     fetchFloorVacancies(id),
     fetchRentTrend(id),
     fetchBuildingImages(id),
+    fetchCommercialArea(id),
   ]);
   if (!detail) notFound();
 
@@ -119,6 +122,9 @@ export default async function BuildingDetailPage({
         <SectionHeading level={3} className="mb-4">임대료 추이</SectionHeading>
         <RentTrendChart data={trend} />
       </section>
+
+      {/* 발달상권/거주인구 등 지역 통계 — 맨 하단. 데이터 없으면 컴포넌트가 null 반환 */}
+      <CommercialAreaSection data={commercial} />
 
       <section className="border-t border-hairline-soft pt-6 text-caption text-stone">
         데이터 출처: 중개사 임대안내문 및 국토교통부 건축물대장. 실제 계약 조건은
