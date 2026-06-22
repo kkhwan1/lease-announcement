@@ -13,3 +13,6 @@ phase2-home.png
 data/*.csv
 Raw/datasets/*.csv
 *.csv
+
+# GitHub Actions 워크플로우 (PAT에 workflow scope 없어 push 불가, 웹 배포 불필요)
+.github/workflows/
