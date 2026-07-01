@@ -2,10 +2,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
+import { getBuildingDetailBundle } from "@/lib/buildingDetail";
 import {
-  fetchBuildingDetail,
-  fetchFloorVacancies,
-  fetchRentTrend,
   fetchBuildingImages,
   fetchCommercialArea,
 } from "@/lib/queries";
@@ -24,7 +22,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const detail = await fetchBuildingDetail(id);
+  const { detail } = getBuildingDetailBundle(id);
   if (!detail) return { title: "건물을 찾을 수 없음" };
   return {
     title: detail.name,
@@ -39,14 +37,14 @@ export default async function BuildingDetailPage({
 }) {
   const { id } = await params;
 
-  // 5개 쿼리 완전 병렬화 — detail 지연이 나머지 조회를 막지 않도록.
-  const [detail, floors, trend, images, commercial] = await Promise.all([
-    fetchBuildingDetail(id),
-    fetchFloorVacancies(id),
-    fetchRentTrend(id),
-    fetchBuildingImages(id),
-    fetchCommercialArea(id),
-  ]);
+  // 상세 번들(detail+floors+rents)은 서버에서 SQLite 직접 조회(self-fetch 없음).
+  // 이미지·상권은 현재 빈값이지만 시그니처 유지 위해 그대로 병렬 호출.
+  const [{ detail, floors, rents: trend }, images, commercial] =
+    await Promise.all([
+      Promise.resolve(getBuildingDetailBundle(id)),
+      fetchBuildingImages(id),
+      fetchCommercialArea(id),
+    ]);
   if (!detail) notFound();
 
   return (
