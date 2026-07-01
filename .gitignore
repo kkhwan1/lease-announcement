@@ -16,3 +16,6 @@ Raw/datasets/*.csv
 
 # MCP 설정(Supabase 액세스 토큰 포함) — 커밋 금지
 .mcp.json
+
+# 로컬 로그(지오코딩 등) — 커밋 불필요
+logs/
