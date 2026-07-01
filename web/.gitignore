@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 로컬 SQLite. lease.db는 Vercel 배포 번들에 필요하므로 커밋(read-only, redeploy로 갱신).
+# WAL 잔재(-wal/-shm)만 무시.
+/data/*
+!/data/lease.db

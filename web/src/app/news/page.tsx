@@ -267,9 +267,19 @@ export default function NewsPage() {
       ) : loading ? (
         <p className="py-16 text-center text-body-md text-steel">불러오는 중…</p>
       ) : articles.length === 0 ? (
-        <p className="py-16 text-center text-body-md text-steel">
-          해당 조건의 뉴스가 아직 없습니다.
-        </p>
+        // 필터가 초기 상태(전체)인지 여부로 안내 메시지 분기.
+        // 초기 상태에서 빈 배열 → 뉴스 데이터 자체가 없는 경우(DB 준비중).
+        // 필터 적용 상태에서 빈 배열 → 조건에 맞는 결과 없음.
+        sector === "all" && sub === "all" && keyword === "" && period === "all" ? (
+          <div className="py-16 text-center">
+            <p className="text-body-md text-steel">뉴스 준비중입니다.</p>
+            <p className="mt-2 text-body-sm text-stone">곧 업데이트될 예정입니다.</p>
+          </div>
+        ) : (
+          <p className="py-16 text-center text-body-md text-steel">
+            해당 조건의 뉴스가 없습니다.
+          </p>
+        )
       ) : (
         <>
           <div
